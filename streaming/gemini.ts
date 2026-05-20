@@ -43,14 +43,6 @@ function isGemini3ProModel(modelId: string): boolean {
   return /gemini-3(?:\.\d+)?-pro/.test(modelId.toLowerCase());
 }
 
-function isGemini3FlashModel(modelId: string): boolean {
-  return /gemini-3(?:\.\d+)?-flash/.test(modelId.toLowerCase());
-}
-
-function isGemini25ProModel(modelId: string): boolean {
-  return /gemini-2\.5-pro/.test(modelId.toLowerCase());
-}
-
 function getGemini3ThinkingLevel(effort: string, modelId: string): ThinkingLevel {
   if (isGemini3ProModel(modelId)) {
     if (effort === "minimal" || effort === "low") return ThinkingLevel.LOW;
@@ -58,19 +50,6 @@ function getGemini3ThinkingLevel(effort: string, modelId: string): ThinkingLevel
     return ThinkingLevel.HIGH;
   }
   return THINKING_LEVEL_MAP[effort];
-}
-
-function getLowestThinkingConfig(modelId: string): GeminiThinkingConfig {
-  if (isGemini3ProModel(modelId)) {
-    return { thinkingLevel: ThinkingLevel.LOW };
-  }
-  if (isGemini3FlashModel(modelId)) {
-    return { thinkingLevel: ThinkingLevel.MINIMAL };
-  }
-  if (isGemini25ProModel(modelId)) {
-    return { thinkingBudget: 128 };
-  }
-  return { thinkingBudget: 0 };
 }
 
 function mapGeminiStopReason(reason: string): "stop" | "length" | "toolUse" | "error" {
@@ -168,7 +147,18 @@ export function streamGemini(
 
           config.thinkingConfig = thinkingConfig;
         } else {
-          config.thinkingConfig = getLowestThinkingConfig(model.apiId);
+          // If no reasoning level is specified:
+          // - For Gemini 3.x/3.5 models, omit thinkingConfig entirely so Vertex AI uses
+          //   the model's native default level (e.g. MEDIUM for 3.5, HIGH for others).
+          // - For Gemini 2.5 models, apply a healthy thinking budget floor because
+          //   thinking is disabled by default on 2.5.
+          const isGemini3 = model.apiId.startsWith("gemini-3");
+          if (!isGemini3) {
+            config.thinkingConfig = {
+              includeThoughts: true,
+              thinkingBudget: model.apiId.includes("2.5-pro") ? 2048 : 1024,
+            };
+          }
         }
       }
 

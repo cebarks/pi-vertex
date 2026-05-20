@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.9] - 2026-05-20
+### Added
+- **Gemini 3.5 Flash** (`gemini-3.5-flash`) — GA Vertex model with 1M input context, 65,535 max output tokens, reasoning, tool support, and $1.50/$9.00 per 1M token global pricing.
+- **xAI Grok models** via Vertex MaaS: `grok-4.20-reasoning` and `grok-4.1-fast-reasoning`, including cache-read pricing.
+- **Gemma 4 26B A4B IT** (`gemma-4-26b-a4b-it`) via Vertex MaaS.
+- **Regional Claude pricing metadata** through optional `costRegional` model costs.
+
+### Fixed
+- Preserve Gemini 3/3.5 native thinking defaults when Pi reasoning is not explicitly requested by omitting `thinkingConfig` for those models.
+- Apply a healthy default thinking budget for Gemini 2.5 models when Pi reasoning is not explicitly requested.
+- Use regional Claude pricing when the resolved Vertex endpoint is non-global.
+
 ## [1.1.8] - 2026-05-06
 ### Fixed
 - **Double `stream.end()` on the Anthropic path**: `streamAnthropic()` was calling `stream.end()` internally and then `streamMaaS()` was calling it again. Made `streamAnthropic()` lifecycle-neutral (pushes start/deltas/done but does not end the stream) so end() is called exactly once, matching the OpenAI-compat path. Idempotent in pi-ai today, but now correct by construction.

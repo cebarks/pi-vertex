@@ -41,11 +41,11 @@ Set your GCP project and credentials. Vertex AI models (Gemini, Claude, Llama, D
 
 ## Features
 
-- **39 models** across 4 categories:
-  - **Gemini** (8): 3.1 Pro, 3.1 Flash-Lite, 3 Flash, 2.5 Pro, 2.5 Flash, 2.0 Flash, and more
+- **43 models** across 4 categories:
+  - **Gemini** (9): 3.5 Flash, 3.1 Pro, 3.1 Flash-Lite, 3 Flash, 2.5 Pro, 2.5 Flash, 2.5 Flash-Lite, 2.0 Flash, and 2.0 Flash-Lite
   - **Claude** (10): Opus 4.7, Opus 4.6, Sonnet 4.6, 4.5, 4.1, 4, Haiku 4.5, 3.5 Sonnet v2
   - **Llama** (3): 4 Maverick, 4 Scout, 3.3 70B
-  - **Other MaaS** (18): Mistral, DeepSeek, Qwen, OpenAI GPT-OSS, Kimi, MiniMax, GLM
+  - **Other MaaS** (21): Grok, Gemma, Mistral, DeepSeek, Qwen, OpenAI GPT-OSS, Kimi, MiniMax, GLM
 
 - **Unified streaming**: Single provider, multiple model families
 - **Full tool calling support**: All models with multi-turn tool use and proper tool result handling
@@ -148,6 +148,7 @@ alias pil="GOOGLE_CLOUD_PROJECT=your-project pi --provider vertex --model llama-
 
 | Model | Context | Max Tokens | Input | Reasoning | Price (in/out) |
 |-------|---------|------------|-------|-----------|----------------|
+| gemini-3.5-flash | 1M | 65,535 | text, image | ✅ | $1.50/$9.00 |
 | gemini-3.1-pro | 1M | 65,536 | text, image | ✅ | $2.00/$12.00 |
 | gemini-3.1-flash-lite | 1M | 65,535 | text, image | ✅ | $0.25/$1.50 |
 | gemini-3-flash | 1M | 65,536 | text, image | ✅ | $0.50/$3.00 |
@@ -159,18 +160,20 @@ alias pil="GOOGLE_CLOUD_PROJECT=your-project pi --provider vertex --model llama-
 
 ### Claude Models
 
-| Model | Context | Max Tokens | Input | Reasoning | Price (in/out) | Region |
-|-------|---------|------------|-------|-----------|----------------|--------|
-| claude-opus-4-7 | 1M | 128,000 | text, image | ✅ | $5.50/$27.50 | global |
-| claude-opus-4-6 | 1M | 128,000 | text, image | ✅ | $5.50/$27.50 | global |
-| claude-sonnet-4-6 | 1M | 128,000 | text, image | ✅ | $3.30/$16.50 | global |
-| claude-opus-4-5 | 200K | 32,000 | text, image | ✅ | $5.00/$25.00 | global |
-| claude-sonnet-4-5 | 200K | 64,000 | text, image | ✅ | $3.00/$15.00 | global |
-| claude-haiku-4-5 | 200K | 64,000 | text, image | ✅ | $1.00/$5.00 | global |
-| claude-opus-4-1 | 200K | 32,000 | text, image | ✅ | $15.00/$75.00 | global |
-| claude-opus-4 | 200K | 32,000 | text, image | ✅ | $15.00/$75.00 | global |
-| claude-sonnet-4 | 200K | 64,000 | text, image | ✅ | $3.00/$15.00 | global |
-| claude-3-5-sonnet-v2 | 200K | 8,192 | text, image | ❌ | $3.00/$15.00 | global |
+Prices shown are for the **global** endpoint. Non-global Vertex regions use `costRegional` where Google publishes a regional premium.
+
+| Model | Context | Max Tokens | Input | Reasoning | Price global (in/out) | Price regional (in/out) |
+|-------|---------|------------|-------|-----------|------------------------|--------------------------|
+| claude-opus-4-7 | 1M | 128,000 | text, image | ✅ | $5.00/$25.00 | $5.50/$27.50 |
+| claude-opus-4-6 | 1M | 128,000 | text, image | ✅ | $5.00/$25.00 | $5.50/$27.50 |
+| claude-sonnet-4-6 | 1M | 128,000 | text, image | ✅ | $3.00/$15.00 | $3.30/$16.50 |
+| claude-opus-4-5 | 200K | 32,000 | text, image | ✅ | $5.00/$25.00 | $5.50/$27.50 |
+| claude-sonnet-4-5 | 200K | 64,000 | text, image | ✅ | $3.00/$15.00 | $3.30/$16.50 |
+| claude-haiku-4-5 | 200K | 64,000 | text, image | ✅ | $1.00/$5.00 | $1.10/$5.50 |
+| claude-opus-4-1 | 200K | 32,000 | text, image | ✅ | $15.00/$75.00 | (uniform) |
+| claude-opus-4 | 200K | 32,000 | text, image | ✅ | $15.00/$75.00 | (uniform) |
+| claude-sonnet-4 | 200K | 64,000 | text, image | ✅ | $3.00/$15.00 | (uniform) |
+| claude-3-5-sonnet-v2 | 200K | 8,192 | text, image | ❌ | $3.00/$15.00 | (uniform) |
 
 ### Llama Models
 
@@ -184,6 +187,9 @@ alias pil="GOOGLE_CLOUD_PROJECT=your-project pi --provider vertex --model llama-
 
 | Model | Context | Publisher | Price (in/out) | Region |
 |-------|---------|-----------|----------------|--------|
+| grok-4.20-reasoning | 200K | xai | $1.25/$2.50 | global |
+| grok-4.1-fast-reasoning | 128K | xai | $0.20/$0.50 | global |
+| gemma-4-26b-a4b-it | 262K | google | $0.15/$0.60 | global |
 | mistral-medium-3 | 128K | mistralai | $0.40/$2.00 | global |
 | mistral-small-3.1 | 128K | mistralai | $0.10/$0.30 | global |
 | mistral-ocr | 30 pages | mistralai | $0.0005/page | global |

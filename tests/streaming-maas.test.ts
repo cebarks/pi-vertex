@@ -135,6 +135,46 @@ describe("streamMaaS — Anthropic path", () => {
     expect(text).toBe("Hello world");
   });
 
+  it("uses regional Claude pricing when the resolved endpoint is non-global", async () => {
+    mocks.getAuthConfig.mockReturnValue({ projectId: "test-project", location: "europe-west1" });
+    mocks.anthropicStream.mockReturnValue(
+      asyncIter([
+        {
+          type: "message_start",
+          message: {
+            id: "msg_regional",
+            usage: {
+              input_tokens: 1_000_000,
+              cache_read_input_tokens: 0,
+              cache_creation_input_tokens: 0,
+            },
+          },
+        },
+        {
+          type: "message_delta",
+          delta: { stop_reason: "end_turn" },
+          usage: { output_tokens: 1_000_000 },
+        },
+      ]),
+    );
+
+    const events = await collectEvents(
+      streamMaaS(
+        makeAnthropicModel({
+          cost: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
+          costRegional: { input: 3.3, output: 16.5, cacheRead: 0.33, cacheWrite: 4.125 },
+        }),
+        baseContext,
+      ),
+    );
+
+    const done = events.find((e) => e.type === "done");
+    if (done?.type !== "done") throw new Error("Expected done event");
+    expect(done.message.usage.cost.input).toBeCloseTo(3.3);
+    expect(done.message.usage.cost.output).toBeCloseTo(16.5);
+    expect(done.message.usage.cost.total).toBeCloseTo(19.8);
+  });
+
   it("calls stream.end() exactly once across the Anthropic path (no double-end regression)", async () => {
     // Spy on the prototype of the stream returned by the public factory.
     const piAi = await import("@mariozechner/pi-ai");

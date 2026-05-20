@@ -47,7 +47,10 @@ export interface VertexModelConfig {
   input: ModelInputType[];
   reasoning: boolean;
   tools: boolean;
+  /** Default/global endpoint pricing, per 1M tokens. */
   cost: ModelCost;
+  /** Optional non-global endpoint pricing, per 1M tokens. */
+  costRegional?: ModelCost;
   region: string;
 }
 

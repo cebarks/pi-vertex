@@ -72,12 +72,13 @@ describe("streamGemini", () => {
     );
   });
 
-  it("uses the lowest supported Gemini 2.5 thinking config when Pi reasoning is not requested", async () => {
+  it("uses a healthy Gemini 2.5 thinking config when Pi reasoning is not requested", async () => {
     await collectEvents(streamGemini(makeModel(), baseContext));
 
     expect(mocks.generateContentStream).toHaveBeenCalledOnce();
     expect(mocks.generateContentStream.mock.calls[0][0].config.thinkingConfig).toEqual({
-      thinkingBudget: 128,
+      includeThoughts: true,
+      thinkingBudget: 2048,
     });
 
     mocks.generateContentStream.mockClear();
@@ -87,8 +88,33 @@ describe("streamGemini", () => {
     );
 
     expect(mocks.generateContentStream.mock.calls[0][0].config.thinkingConfig).toEqual({
-      thinkingBudget: 0,
+      includeThoughts: true,
+      thinkingBudget: 1024,
     });
+  });
+
+  it("omits thinkingConfig for Gemini 3/3.5 when Pi reasoning is not requested", async () => {
+    await collectEvents(
+      streamGemini(makeModel({ id: "gemini-3.5-flash", apiId: "gemini-3.5-flash" }), baseContext),
+    );
+
+    expect(mocks.generateContentStream).toHaveBeenCalledOnce();
+    expect(mocks.generateContentStream.mock.calls[0][0].config).not.toHaveProperty(
+      "thinkingConfig",
+    );
+
+    mocks.generateContentStream.mockClear();
+
+    await collectEvents(
+      streamGemini(
+        makeModel({ id: "gemini-3.1-pro", apiId: "gemini-3.1-pro-preview" }),
+        baseContext,
+      ),
+    );
+
+    expect(mocks.generateContentStream.mock.calls[0][0].config).not.toHaveProperty(
+      "thinkingConfig",
+    );
   });
 
   it("maps Gemini 3 Pro thinking levels to supported Vertex values", async () => {
