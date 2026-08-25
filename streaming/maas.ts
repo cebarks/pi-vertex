@@ -259,12 +259,30 @@ async function streamAnthropic(
       : {}),
   };
 
-  // Thinking
+  // Thinking — adaptive (4.6+) vs legacy (4.5 and below)
   if (model.reasoning && options?.reasoning) {
-    const effort = mapAnthropicEffort(options.reasoning);
-    if (effort) {
-      params.thinking = { type: "adaptive" };
-      params.output_config = { effort };
+    if (model.adaptiveThinking) {
+      // Claude 4.6+: adaptive thinking with effort parameter
+      const effort = mapAnthropicEffort(options.reasoning);
+      if (effort) {
+        params.thinking = { type: "adaptive" };
+        params.output_config = { effort };
+      }
+    } else {
+      // Claude 4.5 and below: legacy thinking with budget_tokens
+      const budgetMap: Record<string, number> = {
+        minimal: 1024,
+        low: 2048,
+        medium: 4096,
+        high: 8192,
+        xhigh: 16384,
+      };
+      const budget = budgetMap[options.reasoning] ?? 8192;
+      params.thinking = { type: "enabled", budget_tokens: budget };
+      // max_tokens must be > budget_tokens for legacy thinking
+      if (params.max_tokens <= budget) {
+        params.max_tokens = budget + 1024;
+      }
     }
   }
 

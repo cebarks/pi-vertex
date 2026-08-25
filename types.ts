@@ -47,6 +47,13 @@ export interface VertexModelConfig {
   input: ModelInputType[];
   reasoning: boolean;
   tools: boolean;
+  /**
+   * Whether this model supports adaptive thinking with output_config.effort.
+   * When true, sends { thinking: { type: "adaptive" }, output_config: { effort } }.
+   * When false/undefined, sends legacy { thinking: { type: "enabled", budget_tokens: N } }.
+   * Claude 4.6+ models use adaptive thinking; older models use legacy.
+   */
+  adaptiveThinking?: boolean;
   /** Default/global endpoint pricing, per 1M tokens. */
   cost: ModelCost;
   /** Optional non-global endpoint pricing, per 1M tokens. */

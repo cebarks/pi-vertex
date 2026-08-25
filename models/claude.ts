@@ -23,6 +23,7 @@ export const CLAUDE_MODELS: VertexModelConfig[] = [
     input: ["text", "image"],
     reasoning: true,
     tools: true,
+    adaptiveThinking: true,
     cost: {
       input: 2.0,
       output: 10.0,
@@ -49,6 +50,7 @@ export const CLAUDE_MODELS: VertexModelConfig[] = [
     input: ["text", "image"],
     reasoning: true,
     tools: true,
+    adaptiveThinking: true,
     cost: {
       input: 5.0,
       output: 25.0,
@@ -76,6 +78,7 @@ export const CLAUDE_MODELS: VertexModelConfig[] = [
     input: ["text", "image"],
     reasoning: true,
     tools: true,
+    adaptiveThinking: true,
     cost: {
       input: 5.0,
       output: 25.0,
@@ -103,6 +106,7 @@ export const CLAUDE_MODELS: VertexModelConfig[] = [
     input: ["text", "image"],
     reasoning: true,
     tools: true,
+    adaptiveThinking: true,
     cost: {
       input: 5.0,
       output: 25.0,
@@ -128,6 +132,7 @@ export const CLAUDE_MODELS: VertexModelConfig[] = [
     input: ["text", "image"],
     reasoning: true,
     tools: true,
+    adaptiveThinking: true,
     cost: {
       input: 3.0,
       output: 15.0,
