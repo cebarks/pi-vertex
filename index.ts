@@ -136,8 +136,11 @@ export default async function (pi: ExtensionAPI) {
 
   if (newModels.length > 0) {
     vertexStartupLines.push(
-      `   [pi-vertex] New models detected (add to static table to enable): ${newModels.join(", ")}`,
+      `   [pi-vertex] ${newModels.length} new models detected (add to static table to enable):`,
     );
+    for (const m of newModels) {
+      vertexStartupLines.push(`       ${m}`);
+    }
   }
 
   // Show startup widget that clears on first user input
