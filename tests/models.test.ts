@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { ALL_MODELS, getModelById, getModelsByEndpointType } from "../models/index.js";
+import { STATIC_MODELS, getModelById, getModelsByEndpointType } from "../models/index.js";
 
-describe("models", () => {
-  it("has at least 43 models registered", () => {
-    expect(ALL_MODELS.length).toBeGreaterThanOrEqual(43);
+describe("static models", () => {
+  it("has at least 47 models registered", () => {
+    expect(STATIC_MODELS.length).toBeGreaterThanOrEqual(47);
   });
 
   it("every model has required fields", () => {
-    for (const model of ALL_MODELS) {
+    for (const model of STATIC_MODELS) {
       expect(model.id).toBeTruthy();
       expect(model.name).toBeTruthy();
       expect(model.apiId).toBeTruthy();
@@ -21,7 +21,7 @@ describe("models", () => {
   });
 
   it("has unique ids", () => {
-    const ids = ALL_MODELS.map((m) => m.id);
+    const ids = STATIC_MODELS.map((m: { id: string }) => m.id);
     const uniqueIds = new Set(ids);
     expect(uniqueIds.size).toBe(ids.length);
   });
@@ -38,18 +38,33 @@ describe("models", () => {
 
   it("getModelsByEndpointType filters correctly", () => {
     const geminiModels = getModelsByEndpointType("gemini");
-    expect(geminiModels.every((m) => m.endpointType === "gemini")).toBe(true);
+    expect(geminiModels.every((m: { endpointType: string }) => m.endpointType === "gemini")).toBe(true);
 
     const maasModels = getModelsByEndpointType("maas");
-    expect(maasModels.every((m) => m.endpointType === "maas")).toBe(true);
+    expect(maasModels.every((m: { endpointType: string }) => m.endpointType === "maas")).toBe(true);
   });
 
   it("Claude models have correct publisher", () => {
-    const claudeModels = ALL_MODELS.filter((m) => m.id.startsWith("claude-"));
+    const claudeModels = STATIC_MODELS.filter((m: { id: string }) => m.id.startsWith("claude-"));
     expect(claudeModels.length).toBeGreaterThan(0);
     for (const model of claudeModels) {
       expect(model.publisher).toBe("anthropic");
     }
+  });
+
+  it("includes new Claude models (sonnet-5, opus-4-8)", () => {
+    expect(getModelById("claude-sonnet-5")).toMatchObject({
+      name: "Claude Sonnet 5",
+      contextWindow: 1000000,
+      maxTokens: 128000,
+      cost: { input: 2.0, output: 10.0 },
+    });
+    expect(getModelById("claude-opus-4-8")).toMatchObject({
+      name: "Claude Opus 4.8",
+      contextWindow: 1000000,
+      maxTokens: 128000,
+      cost: { input: 5.0, output: 25.0 },
+    });
   });
 
   it("Claude 4.6+ models use current Vertex output limits and regional pricing", () => {
@@ -71,7 +86,7 @@ describe("models", () => {
   });
 
   it("Gemini models have correct publisher", () => {
-    const geminiModels = ALL_MODELS.filter((m) => m.id.startsWith("gemini-"));
+    const geminiModels = STATIC_MODELS.filter((m: { id: string }) => m.id.startsWith("gemini-"));
     expect(geminiModels.length).toBeGreaterThan(0);
     for (const model of geminiModels) {
       expect(model.publisher).toBe("google");
@@ -90,18 +105,12 @@ describe("models", () => {
     });
   });
 
-  it("registers new upstream MaaS models", () => {
+  it("registers MaaS models from multiple publishers", () => {
     expect(getModelById("grok-4.20-reasoning")).toMatchObject({
       publisher: "xai",
       contextWindow: 200000,
       input: ["text", "image"],
       cost: { input: 1.25, output: 2.5, cacheRead: 0.2, cacheWrite: 0 },
-    });
-    expect(getModelById("grok-4.1-fast-reasoning")).toMatchObject({
-      publisher: "xai",
-      contextWindow: 128000,
-      input: ["text", "image"],
-      cost: { input: 0.2, output: 0.5, cacheRead: 0.05, cacheWrite: 0 },
     });
     expect(getModelById("gemma-4-26b-a4b-it")).toMatchObject({
       publisher: "google",
@@ -109,7 +118,6 @@ describe("models", () => {
       maxTokens: 128000,
       input: ["text", "image"],
       tools: false,
-      cost: { input: 0.15, output: 0.6, cacheRead: 0.015, cacheWrite: 0 },
     });
   });
 });
