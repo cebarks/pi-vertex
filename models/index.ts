@@ -1,19 +1,19 @@
 /**
- * Export all Vertex AI model definitions and discovery integration.
+ * Model definitions and discovery integration.
  *
- * Static model tables provide authoritative metadata (pricing, context window,
- * capabilities). Dynamic discovery via the Model Garden API adds models not yet
- * in the static tables.
+ * Static model tables provide authoritative metadata (pricing, context windows,
+ * capabilities). Dynamic discovery determines which models are actually available
+ * in the user's GCP project via countTokens probing.
  */
 
 import type { VertexModelConfig } from "../types.js";
 import type { DiscoveryOptions } from "../discovery.js";
-import { discoverModels, mergeWithStatic } from "../discovery.js";
+import { discoverAvailableModels, buildModelConfigs } from "../discovery.js";
 import { CLAUDE_MODELS } from "./claude.js";
 import { GEMINI_MODELS } from "./gemini.js";
 import { MAAS_MODELS } from "./maas.js";
 
-/** All statically defined models (no discovery). */
+/** All statically defined models (metadata enrichment source). */
 export const STATIC_MODELS: VertexModelConfig[] = [
   ...GEMINI_MODELS,
   ...CLAUDE_MODELS,
@@ -21,35 +21,24 @@ export const STATIC_MODELS: VertexModelConfig[] = [
 ].sort((a, b) => a.id.localeCompare(b.id));
 
 /**
- * Get all available models: static metadata merged with dynamic discovery.
- *
- * - Models in static tables get authoritative metadata
- * - Discovered MaaS models not in static tables get publisher defaults
- * - Discovered Google models not in static tables are logged but not registered
+ * Get all available models: discover what's accessible in the GCP project,
+ * enrich with static metadata where available, use publisher defaults otherwise.
  */
 export async function getAllModels(
   options?: DiscoveryOptions,
-): Promise<{ models: VertexModelConfig[]; fromCache: boolean; discoveredCount: number; newModels: string[] }> {
-  const { discovered, fromCache } = await discoverModels(options);
+): Promise<{ models: VertexModelConfig[]; fromCache: boolean; count: number }> {
+  const { available, fromCache } = await discoverAvailableModels(options);
 
-  if (discovered.length === 0) {
-    // Discovery disabled or failed — static only
-    return { models: STATIC_MODELS, fromCache: false, discoveredCount: 0, newModels: [] };
+  if (available.length === 0) {
+    // Discovery disabled or failed — fall back to static models
+    return { models: STATIC_MODELS, fromCache: false, count: STATIC_MODELS.length };
   }
 
-  const { merged, newModels } = mergeWithStatic(discovered, STATIC_MODELS);
-  const sorted = merged.sort((a, b) => a.id.localeCompare(b.id));
-
-  return {
-    models: sorted,
-    fromCache,
-    discoveredCount: discovered.length,
-    newModels,
-  };
+  const models = buildModelConfigs(available, STATIC_MODELS);
+  return { models, fromCache, count: models.length };
 }
 
 export function getModelById(id: string): VertexModelConfig | undefined {
-  // Check static first (fast path)
   return STATIC_MODELS.find((m) => m.id === id);
 }
 

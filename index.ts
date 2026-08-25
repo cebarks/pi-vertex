@@ -95,14 +95,14 @@ export default async function (pi: ExtensionAPI) {
     return;
   }
 
-  // Run dynamic model discovery (with disk cache)
-  const { models: allModels, fromCache, discoveredCount, newModels } = await getAllModels({
+  // Discover available models (list + probe, cached to disk)
+  const { models: allModels, fromCache, count } = await getAllModels({
     enabled: config.discoveryEnabled,
     cacheTtlMs: config.discoveryCacheTtlMs,
     publishers: config.discoveryPublishers,
   });
 
-  // Build a lookup that includes both static and discovered models
+  // Build a lookup for streaming dispatch
   const modelById = new Map(allModels.map((m) => [m.id, m]));
 
   // Register the provider
@@ -122,26 +122,11 @@ export default async function (pi: ExtensionAPI) {
     },
   });
 
-  // Build startup info lines
+  // Build startup info
+  const cacheNote = fromCache ? "cached" : "fresh";
   const vertexStartupLines: string[] = [
-    `   [pi-vertex] Project: ${projectId} | ${allModels.length} models`,
+    `   [pi-vertex] Project: ${projectId} | ${count} models available (${cacheNote})`,
   ];
-
-  if (discoveredCount > 0) {
-    const cacheNote = fromCache ? "cached" : "fresh";
-    vertexStartupLines.push(
-      `   [pi-vertex] Discovery: ${discoveredCount} models checked (${cacheNote})`,
-    );
-  }
-
-  if (newModels.length > 0) {
-    vertexStartupLines.push(
-      `   [pi-vertex] ${newModels.length} new models detected (add to static table to enable):`,
-    );
-    for (const m of newModels) {
-      vertexStartupLines.push(`       ${m}`);
-    }
-  }
 
   // Show startup widget that clears on first user input
   pi.on("session_start", async (_event: SessionStartEvent, ctx: ExtensionContext) => {
