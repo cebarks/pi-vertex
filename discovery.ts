@@ -88,7 +88,7 @@ const PUBLISHER_DEFAULTS: Record<string, PublisherDefaults> = {
   google: {
     endpointType: "gemini",
     contextWindow: 1048576,
-    maxTokens: 65536,
+    maxTokens: 65535,
     input: ["text", "image"],
     reasoning: true,
     tools: true,
