@@ -49,7 +49,9 @@ function toPiModel(config: VertexModelConfig): Model<Api> {
     name: config.name,
     api: "vertex-unified",
     provider: "vertex",
-    baseUrl: "", // Will be set dynamically
+    baseUrl: undefined, // Must be undefined (not "") so pi's applyExtension() falls
+    // through to provider-level baseUrl via ??. Empty string wins the coalesce
+    // but fails the falsy check. Actual URLs built in streaming/index.ts.
     reasoning: config.reasoning,
     input: config.input,
     cost: config.cost,
