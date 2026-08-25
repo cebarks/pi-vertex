@@ -11,6 +11,110 @@
 import type { VertexModelConfig } from "../types.js";
 
 export const CLAUDE_MODELS: VertexModelConfig[] = [
+  // Claude 5 series
+  {
+    id: "claude-sonnet-5",
+    name: "Claude Sonnet 5",
+    apiId: "claude-sonnet-5",
+    publisher: "anthropic",
+    endpointType: "maas",
+    contextWindow: 1000000,
+    maxTokens: 128000,
+    input: ["text", "image"],
+    reasoning: true,
+    tools: true,
+    cost: {
+      input: 2.0,
+      output: 10.0,
+      cacheRead: 0.2,
+      cacheWrite: 2.5,
+    },
+    costRegional: {
+      input: 2.2,
+      output: 11.0,
+      cacheRead: 0.22,
+      cacheWrite: 2.75,
+    },
+    region: "global",
+  },
+  {
+    id: "claude-fable-5",
+    name: "Claude Fable 5",
+    apiId: "claude-fable-5",
+    publisher: "anthropic",
+    endpointType: "maas",
+    contextWindow: 1000000,
+    maxTokens: 128000,
+    input: ["text", "image"],
+    reasoning: true,
+    tools: true,
+    cost: {
+      input: 5.0,
+      output: 25.0,
+      cacheRead: 0.5,
+      cacheWrite: 6.25,
+    },
+    costRegional: {
+      input: 5.5,
+      output: 27.5,
+      cacheRead: 0.55,
+      cacheWrite: 6.875,
+    },
+    region: "global",
+  },
+  {
+    id: "claude-opus-5",
+    name: "Claude Opus 5",
+    apiId: "claude-opus-5",
+    publisher: "anthropic",
+    endpointType: "maas",
+    contextWindow: 1000000,
+    maxTokens: 128000,
+    input: ["text", "image"],
+    reasoning: true,
+    tools: true,
+    cost: {
+      input: 5.0,
+      output: 25.0,
+      cacheRead: 0.5,
+      cacheWrite: 6.25,
+    },
+    costRegional: {
+      input: 5.5,
+      output: 27.5,
+      cacheRead: 0.55,
+      cacheWrite: 6.875,
+    },
+    region: "global",
+  },
+
+  // Claude 4.8 series
+  {
+    id: "claude-opus-4-8",
+    name: "Claude Opus 4.8",
+    apiId: "claude-opus-4-8",
+    publisher: "anthropic",
+    endpointType: "maas",
+    contextWindow: 1000000,
+    maxTokens: 128000,
+    input: ["text", "image"],
+    reasoning: true,
+    tools: true,
+    cost: {
+      input: 5.0,
+      output: 25.0,
+      cacheRead: 0.5,
+      cacheWrite: 6.25,
+    },
+    costRegional: {
+      input: 5.5,
+      output: 27.5,
+      cacheRead: 0.55,
+      cacheWrite: 6.875,
+    },
+    region: "global",
+  },
+
   // Claude 4.7 series
   {
     id: "claude-opus-4-7",

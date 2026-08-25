@@ -8,6 +8,7 @@
     "index.ts",
     "auth.ts",
     "config.ts",
+    "discovery.ts",
     "types.ts",
     "utils.ts",
     "models/",

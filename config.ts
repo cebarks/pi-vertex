@@ -28,6 +28,12 @@ export interface VertexConfig {
   googleCloudLocation?: string;
   /** Path to a service account JSON key. Equivalent to GOOGLE_APPLICATION_CREDENTIALS. */
   googleApplicationCredentials?: string;
+  /** Enable dynamic model discovery via Model Garden API. Default: true. */
+  discoveryEnabled?: boolean;
+  /** Cache TTL for discovered models in milliseconds. Default: 86400000 (24h). Set to 0 to force refresh. */
+  discoveryCacheTtlMs?: number;
+  /** List of publishers to query. Default: all known publishers. */
+  discoveryPublishers?: string[];
 }
 
 let _cachedPath: string | null = null;

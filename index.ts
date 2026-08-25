@@ -1,18 +1,24 @@
 /**
- * pi-vertex - Google Vertex AI provider for Pi coding agent
+ * @cebarks/pi-vertex - Google Vertex AI provider for Pi coding agent
+ *
+ * Fork of @lhl/pi-vertex with dynamic model discovery.
  *
  * Supports:
  * - Gemini models (via @google/genai)
- * - Claude models (via OpenAI-compatible endpoint)
+ * - Claude models (via Anthropic Vertex SDK)
  * - All MaaS models (Llama, Mistral, DeepSeek, etc. via OpenAI-compatible endpoint)
+ * - Dynamic model discovery via the Vertex AI Model Garden API
  *
  * Configuration (resolution order: config file → env var):
  *
- *   Config file: ~/.pi/agent/config/pi-vertex.json
+ *   Config file: ~/.pi/agent/settings/pi-vertex.json
  *     {
- *       "project": "my-gcp-project",
- *       "location": "us-central1",
- *       "credentialsFile": "/path/to/service-account.json"
+ *       "googleCloudProject": "my-gcp-project",
+ *       "googleCloudLocation": "us-central1",
+ *       "googleApplicationCredentials": "/path/to/service-account.json",
+ *       "discoveryEnabled": true,
+ *       "discoveryCacheTtlMs": 86400000,
+ *       "discoveryPublishers": ["anthropic", "meta", "mistralai", ...]
  *     }
  *
  *   Env vars (fallback):
@@ -35,7 +41,7 @@ import type {
 } from "@mariozechner/pi-coding-agent";
 import { hasAdcCredentials, resolveProjectId } from "./auth.js";
 import { getConfigPath, loadConfig } from "./config.js";
-import { ALL_MODELS, getModelById } from "./models/index.js";
+import { getAllModels, getModelById, STATIC_MODELS } from "./models/index.js";
 import { streamVertex } from "./streaming/index.js";
 import type { StreamOptions } from "./types.js";
 import type { VertexModelConfig } from "./types.js";
@@ -62,13 +68,12 @@ function toPiModel(config: VertexModelConfig): Model<Api> {
 }
 
 /**
- * Extension entry point
+ * Extension entry point (async — pi awaits extension factory functions)
  */
-export default function (pi: ExtensionAPI) {
+export default async function (pi: ExtensionAPI) {
   const config = loadConfig();
 
   // Apply credentialsFile to environment so all Google SDKs pick it up.
-  // Only set if not already overridden by env var.
   if (config.googleApplicationCredentials && !process.env.GOOGLE_APPLICATION_CREDENTIALS) {
     process.env.GOOGLE_APPLICATION_CREDENTIALS = config.googleApplicationCredentials;
   }
@@ -89,23 +94,25 @@ export default function (pi: ExtensionAPI) {
     return;
   }
 
+  // Run dynamic model discovery (with disk cache)
+  const { models: allModels, fromCache, discoveredCount, newGeminiModels } = await getAllModels({
+    enabled: config.discoveryEnabled,
+    cacheTtlMs: config.discoveryCacheTtlMs,
+    publishers: config.discoveryPublishers,
+  });
+
+  // Build a lookup that includes both static and discovered models
+  const modelById = new Map(allModels.map((m) => [m.id, m]));
+
   // Register the provider
   pi.registerProvider("vertex", {
-    // Use a placeholder baseUrl (actual URLs built per-request based on model region)
     baseUrl: "https://aiplatform.googleapis.com",
-
-    // Use env var name for detection
     apiKey: "GOOGLE_CLOUD_PROJECT",
-
-    // API type varies by model
     api: "vertex-unified",
+    models: allModels.map(toPiModel),
 
-    // Register all models
-    models: ALL_MODELS.map(toPiModel),
-
-    // Custom streaming implementation
     streamSimple: (model: Model<Api>, context: Context, options?: StreamOptions) => {
-      const vertexModel = getModelById(model.id);
+      const vertexModel = modelById.get(model.id) ?? getModelById(model.id);
       if (!vertexModel) {
         throw new Error(`Unknown Vertex model: ${model.id}`);
       }
@@ -114,16 +121,26 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
-  // Show startup info as a widget that clears on first user input
-  const vertexStartupLines = [
-    `   [pi-vertex] Initializing with project: ${projectId}`,
-    `   [pi-vertex] Registered ${ALL_MODELS.length} models`,
+  // Build startup info lines
+  const vertexStartupLines: string[] = [
+    `   [pi-vertex] Project: ${projectId} | ${allModels.length} models`,
   ];
+
+  if (discoveredCount > 0) {
+    const cacheNote = fromCache ? "cached" : "fresh";
+    vertexStartupLines.push(
+      `   [pi-vertex] Discovery: +${discoveredCount} new models (${cacheNote})`,
+    );
+  }
+
+  if (newGeminiModels.length > 0) {
+    vertexStartupLines.push(
+      `   [pi-vertex] New Gemini models detected (add to static table): ${newGeminiModels.join(", ")}`,
+    );
+  }
+
+  // Show startup widget that clears on first user input
   pi.on("session_start", async (_event: SessionStartEvent, ctx: ExtensionContext) => {
-    // The widget render signature is intentionally untyped here — pi exposes the
-    // tui/theme objects via duck typing in the widget contract. Using `unknown`
-    // and narrowing inside would just add ceremony; the values are passed
-    // through to the theme helper.
     ctx.ui.setWidget("pi-vertex-startup", (_tui, theme) => ({
       render: () => [...vertexStartupLines.map((l: string) => theme.fg("muted", l)), ""],
       invalidate: () => {},
@@ -140,3 +157,4 @@ export * from "./models/index.js";
 export * from "./auth.js";
 export * from "./config.js";
 export * from "./streaming/index.js";
+export * from "./discovery.js";
