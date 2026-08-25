@@ -1,7 +1,7 @@
 {
-  "name": "@lhl/pi-vertex",
-  "version": "1.1.9",
-  "description": "Google Vertex AI provider for Pi coding agent - supports Gemini, Claude, and all MaaS models",
+  "name": "@cebarks/pi-vertex",
+  "version": "2.0.0",
+  "description": "Google Vertex AI provider for Pi coding agent with dynamic model discovery",
   "type": "module",
   "main": "index.ts",
   "files": [
@@ -47,14 +47,14 @@
     "extensions": ["./index.ts"]
   },
   "keywords": ["pi-package", "pi-extension", "vertex-ai", "gemini", "claude", "maas"],
-  "author": "Leonard Lin <lhl@randomfoo.net>",
+  "author": "Anten Skrabec <cebarks@gmail.com>",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/lhl/pi-vertex.git"
+    "url": "git+https://github.com/cebarks/pi-vertex.git"
   },
-  "homepage": "https://github.com/lhl/pi-vertex#readme",
+  "homepage": "https://github.com/cebarks/pi-vertex#readme",
   "bugs": {
-    "url": "https://github.com/lhl/pi-vertex/issues"
+    "url": "https://github.com/cebarks/pi-vertex/issues"
   }
 }
