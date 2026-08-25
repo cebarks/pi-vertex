@@ -29,22 +29,22 @@ export const STATIC_MODELS: VertexModelConfig[] = [
  */
 export async function getAllModels(
   options?: DiscoveryOptions,
-): Promise<{ models: VertexModelConfig[]; fromCache: boolean; discoveredCount: number; newGeminiModels: string[] }> {
+): Promise<{ models: VertexModelConfig[]; fromCache: boolean; discoveredCount: number; newModels: string[] }> {
   const { discovered, fromCache } = await discoverModels(options);
 
   if (discovered.length === 0) {
     // Discovery disabled or failed — static only
-    return { models: STATIC_MODELS, fromCache: false, discoveredCount: 0, newGeminiModels: [] };
+    return { models: STATIC_MODELS, fromCache: false, discoveredCount: 0, newModels: [] };
   }
 
-  const { merged, newGeminiModels } = mergeWithStatic(discovered, STATIC_MODELS);
+  const { merged, newModels } = mergeWithStatic(discovered, STATIC_MODELS);
   const sorted = merged.sort((a, b) => a.id.localeCompare(b.id));
 
   return {
     models: sorted,
     fromCache,
-    discoveredCount: sorted.length - STATIC_MODELS.length,
-    newGeminiModels,
+    discoveredCount: discovered.length,
+    newModels,
   };
 }
 

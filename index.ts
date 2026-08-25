@@ -96,7 +96,7 @@ export default async function (pi: ExtensionAPI) {
   }
 
   // Run dynamic model discovery (with disk cache)
-  const { models: allModels, fromCache, discoveredCount, newGeminiModels } = await getAllModels({
+  const { models: allModels, fromCache, discoveredCount, newModels } = await getAllModels({
     enabled: config.discoveryEnabled,
     cacheTtlMs: config.discoveryCacheTtlMs,
     publishers: config.discoveryPublishers,
@@ -130,13 +130,13 @@ export default async function (pi: ExtensionAPI) {
   if (discoveredCount > 0) {
     const cacheNote = fromCache ? "cached" : "fresh";
     vertexStartupLines.push(
-      `   [pi-vertex] Discovery: +${discoveredCount} new models (${cacheNote})`,
+      `   [pi-vertex] Discovery: ${discoveredCount} models checked (${cacheNote})`,
     );
   }
 
-  if (newGeminiModels.length > 0) {
+  if (newModels.length > 0) {
     vertexStartupLines.push(
-      `   [pi-vertex] New Gemini models detected (add to static table): ${newGeminiModels.join(", ")}`,
+      `   [pi-vertex] New models detected (add to static table to enable): ${newModels.join(", ")}`,
     );
   }
 

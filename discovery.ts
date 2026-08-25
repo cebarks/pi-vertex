@@ -266,7 +266,7 @@ export interface DiscoveryOptions {
 export interface DiscoveryResult {
   discovered: DiscoveredModel[];
   fromCache: boolean;
-  newGeminiModels: string[]; // Discovered Google models not in static table
+  newModels: string[]; // Discovered models not in static table (publisher/modelId)
 }
 
 /**
@@ -278,7 +278,7 @@ export async function discoverModels(
 ): Promise<DiscoveryResult> {
   const enabled = options?.enabled ?? true;
   if (!enabled) {
-    return { discovered: [], fromCache: false, newGeminiModels: [] };
+    return { discovered: [], fromCache: false, newModels: [] };
   }
 
   const ttlMs = options?.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS;
@@ -287,14 +287,14 @@ export async function discoverModels(
   // Try cache first
   const cached = readCache(ttlMs);
   if (cached) {
-    return { discovered: cached, fromCache: true, newGeminiModels: [] };
+    return { discovered: cached, fromCache: true, newModels: [] };
   }
 
   // Fetch from API
   const projectId = resolveProjectId();
   if (!projectId) {
     console.warn("[pi-vertex] Discovery: no project ID, skipping");
-    return { discovered: [], fromCache: false, newGeminiModels: [] };
+    return { discovered: [], fromCache: false, newModels: [] };
   }
 
   let accessToken: string;
@@ -302,7 +302,7 @@ export async function discoverModels(
     accessToken = await getAccessToken();
   } catch (err) {
     console.warn(`[pi-vertex] Discovery: auth failed, skipping: ${err}`);
-    return { discovered: [], fromCache: false, newGeminiModels: [] };
+    return { discovered: [], fromCache: false, newModels: [] };
   }
 
   // Query all publishers in parallel
@@ -315,50 +315,44 @@ export async function discoverModels(
   // Cache results
   writeCache(allModels);
 
-  return { discovered: allModels, fromCache: false, newGeminiModels: [] };
+  return { discovered: allModels, fromCache: false, newModels: [] };
 }
 
 /**
  * Merge discovered models with the static metadata table.
  *
- * - Models in static table: use static metadata (authoritative pricing/capabilities)
- * - Anthropic/MaaS models NOT in static table: generate from publisher defaults
- * - Google models NOT in static table: log as detected, skip registration
+ * Only models present in the static table are registered — the static table
+ * acts as a curated allowlist with authoritative pricing/capabilities.
+ * Discovered models NOT in the static table are logged as newly detected
+ * so the user knows they can be added.
  */
 export function mergeWithStatic(
   discovered: DiscoveredModel[],
   staticModels: VertexModelConfig[],
-): { merged: VertexModelConfig[]; newGeminiModels: string[] } {
+): { merged: VertexModelConfig[]; newModels: string[] } {
   const staticById = new Map(staticModels.map((m) => [m.id, m]));
   const merged = new Map<string, VertexModelConfig>();
-  const newGeminiModels: string[] = [];
+  const newModels: string[] = [];
 
   // Start with all static models
   for (const m of staticModels) {
     merged.set(m.id, m);
   }
 
-  // Merge discovered models
+  // Check discovered models against static table
   for (const dm of discovered) {
-    if (merged.has(dm.modelId)) {
-      // Already have static metadata — keep it
+    if (staticById.has(dm.modelId)) {
+      // Already in static table — confirmed available, nothing to do
       continue;
     }
 
-    if (dm.publisher === "google") {
-      // Google models need static metadata for correct endpointType
-      newGeminiModels.push(dm.modelId);
-      continue;
-    }
-
-    // Generate config from publisher defaults
-    const config = generateModelConfig(dm);
-    if (config) {
-      merged.set(dm.modelId, config);
-    }
+    // Not in static table — log as newly detected but don't register.
+    // The Model Garden API returns the global catalog, not project-specific
+    // availability, so registering unknown models would cause noise.
+    newModels.push(`${dm.publisher}/${dm.modelId}`);
   }
 
-  return { merged: Array.from(merged.values()), newGeminiModels };
+  return { merged: Array.from(merged.values()), newModels };
 }
 
 /**
