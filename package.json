@@ -1,6 +1,6 @@
 {
   "name": "@cebarks/pi-vertex",
-  "version": "2.0.1",
+  "version": "2.1.0",
   "description": "Google Vertex AI provider for Pi coding agent with dynamic model discovery",
   "type": "module",
   "main": "index.ts",
