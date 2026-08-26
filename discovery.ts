@@ -9,7 +9,7 @@
  * Results cached to disk for configurable TTL (default 24h).
  */
 
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { getAccessToken, resolveProjectId } from "./auth.js";
 import type { VertexModelConfig, ModelCost, EndpointType, ModelInputType } from "./types.js";
@@ -169,6 +169,15 @@ function readCache(ttlMs: number): CachedAvailableModel[] | null {
   } catch {
     return null;
   }
+}
+
+/** Clear the discovery cache so the next startup re-probes. */
+export function clearCache(): boolean {
+  const cachePath = getCachePath();
+  if (existsSync(cachePath)) {
+    try { unlinkSync(cachePath); return true; } catch { return false; }
+  }
+  return false;
 }
 
 function writeCache(available: CachedAvailableModel[]): void {

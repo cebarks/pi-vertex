@@ -42,6 +42,7 @@ import type {
 import { hasAdcCredentials, resolveProjectId } from "./auth.js";
 import { getConfigPath, loadConfig } from "./config.js";
 import { getAllModels, getModelById, STATIC_MODELS } from "./models/index.js";
+import { clearCache } from "./discovery.js";
 import { streamVertex } from "./streaming/index.js";
 import type { StreamOptions } from "./types.js";
 import type { VertexModelConfig } from "./types.js";
@@ -127,6 +128,30 @@ export default async function (pi: ExtensionAPI) {
   const vertexStartupLines: string[] = [
     `   [pi-vertex] Project: ${projectId} | ${count} models available (${cacheNote})`,
   ];
+
+  // Register /vertex-refresh command
+  pi.registerCommand("vertex-refresh", {
+    description: "Re-probe Vertex AI model availability and update the cache.",
+    handler: async (_args) => {
+      clearCache();
+      const { models, count } = await getAllModels({
+        enabled: true,
+        cacheTtlMs: 0, // Force fresh probe
+        publishers: config.discoveryPublishers,
+      });
+
+      // Update the lookup used by streamSimple
+      modelById.clear();
+      for (const m of models) modelById.set(m.id, m);
+
+      const names = models.map((m) => m.id).join(", ");
+      pi.sendMessage({
+        customType: "pi-vertex-refresh",
+        content: `Vertex model cache refreshed. ${count} models available: ${names}`,
+        display: true,
+      });
+    },
+  });
 
   // Show startup widget that clears on first user input
   pi.on("session_start", async (_event: SessionStartEvent, ctx: ExtensionContext) => {
