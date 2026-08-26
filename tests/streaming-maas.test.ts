@@ -18,9 +18,13 @@ vi.mock("@anthropic-ai/vertex-sdk", () => ({
   AnthropicVertex: mocks.anthropicVertex,
 }));
 
-vi.mock("@earendil-works/pi-ai/api/openai-completions", () => ({
-  streamSimple: mocks.streamSimpleOpenAICompletions,
-}));
+vi.mock("@earendil-works/pi-ai", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@earendil-works/pi-ai")>();
+  return {
+    ...actual,
+    streamSimpleOpenAICompletions: mocks.streamSimpleOpenAICompletions,
+  };
+});
 
 vi.mock("../auth.js", () => ({
   getAuthConfig: mocks.getAuthConfig,

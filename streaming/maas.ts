@@ -19,7 +19,14 @@ import {
   calculateCost,
   createAssistantMessageEventStream,
 } from "@earendil-works/pi-ai";
-import { streamSimple as streamSimpleOpenAICompletions } from "@earendil-works/pi-ai/api/openai-completions";
+
+// Imported from compat/legacy-api-aliases at runtime via pi's virtual module
+// resolution. The subpath @earendil-works/pi-ai/api/openai-completions isn't
+// in pi's virtual module map, so we import from the root compat entrypoint.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { streamSimpleOpenAICompletions } = require("@earendil-works/pi-ai") as {
+  streamSimpleOpenAICompletions: (model: Model<any>, context: any, options?: any) => AssistantMessageEventStream;
+};
 import { buildBaseUrl, getAccessToken, getAuthConfig, resolveLocation } from "../auth.js";
 import type { Context, StreamOptions, VertexModelConfig } from "../types.js";
 
