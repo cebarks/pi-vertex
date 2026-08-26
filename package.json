@@ -1,6 +1,6 @@
 {
   "name": "@cebarks/pi-vertex",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Google Vertex AI provider for Pi coding agent with dynamic model discovery",
   "type": "module",
   "main": "index.ts",
@@ -45,9 +45,18 @@
     "@mariozechner/pi-coding-agent": "*"
   },
   "pi": {
-    "extensions": ["./index.ts"]
+    "extensions": [
+      "./index.ts"
+    ]
   },
-  "keywords": ["pi-package", "pi-extension", "vertex-ai", "gemini", "claude", "maas"],
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "vertex-ai",
+    "gemini",
+    "claude",
+    "maas"
+  ],
   "author": "Anten Skrabec <cebarks@gmail.com>",
   "license": "MIT",
   "repository": {
