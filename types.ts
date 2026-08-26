@@ -22,7 +22,7 @@ export type {
   ToolResultMessage,
   Usage,
   UserMessage,
-} from "@mariozechner/pi-ai";
+} from "@earendil-works/pi-ai";
 
 // Vertex-specific types
 
@@ -70,6 +70,6 @@ export interface AuthConfig {
 export interface StreamOptions {
   maxTokens?: number;
   temperature?: number;
-  reasoning?: "minimal" | "low" | "medium" | "high" | "xhigh";
+  reasoning?: "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
   signal?: AbortSignal;
 }

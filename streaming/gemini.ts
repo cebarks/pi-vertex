@@ -12,7 +12,7 @@ import { FinishReason, GoogleGenAI, ThinkingLevel } from "@google/genai";
 import {
   type AssistantMessageEventStream,
   createAssistantMessageEventStream,
-} from "@mariozechner/pi-ai";
+} from "@earendil-works/pi-ai";
 import { getAuthConfig, resolveLocation } from "../auth.js";
 import type { AssistantMessage, Context, StreamOptions, VertexModelConfig } from "../types.js";
 import {
@@ -391,7 +391,8 @@ export function streamGemini(
         throw new Error(output.errorMessage || "An unknown error occurred");
       }
 
-      stream.push({ type: "done", reason: output.stopReason, message: output });
+      const doneReason = output.stopReason === "pending" ? "stop" : output.stopReason;
+      stream.push({ type: "done", reason: doneReason, message: output });
       stream.end();
     } catch (error) {
       output.stopReason = options?.signal?.aborted ? "aborted" : "error";

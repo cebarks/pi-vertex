@@ -18,8 +18,8 @@ import {
   type Model,
   calculateCost,
   createAssistantMessageEventStream,
-  streamSimpleOpenAICompletions,
-} from "@mariozechner/pi-ai";
+} from "@earendil-works/pi-ai";
+import { streamSimple as streamSimpleOpenAICompletions } from "@earendil-works/pi-ai/api/openai-completions";
 import { buildBaseUrl, getAccessToken, getAuthConfig, resolveLocation } from "../auth.js";
 import type { Context, StreamOptions, VertexModelConfig } from "../types.js";
 

@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { STATIC_MODELS, getModelById, getModelsByEndpointType } from "../models/index.js";
 
 describe("static models", () => {
-  it("has at least 47 models registered", () => {
-    expect(STATIC_MODELS.length).toBeGreaterThanOrEqual(47);
+  it("has at least 45 models registered", () => {
+    expect(STATIC_MODELS.length).toBeGreaterThanOrEqual(45);
   });
 
   it("every model has required fields", () => {

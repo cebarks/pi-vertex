@@ -2,7 +2,7 @@
  * Streaming handler dispatcher
  */
 
-import type { AssistantMessageEventStream } from "@mariozechner/pi-ai";
+import type { AssistantMessageEventStream } from "@earendil-works/pi-ai";
 import type { Context, StreamOptions, VertexModelConfig } from "../types.js";
 import { streamGemini } from "./gemini.js";
 import { streamMaaS } from "./maas.js";
