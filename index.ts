@@ -41,8 +41,8 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import { hasAdcCredentials, resolveProjectId } from "./auth.js";
 import { getConfigPath, loadConfig } from "./config.js";
-import { getAllModels, getModelById, STATIC_MODELS } from "./models/index.js";
 import { clearCache } from "./discovery.js";
+import { STATIC_MODELS, getAllModels, getModelById } from "./models/index.js";
 import { streamVertex } from "./streaming/index.js";
 import type { StreamOptions } from "./types.js";
 import type { VertexModelConfig } from "./types.js";
@@ -97,7 +97,11 @@ export default async function (pi: ExtensionAPI) {
   }
 
   // Discover available models (list + probe, cached to disk)
-  const { models: allModels, fromCache, count } = await getAllModels({
+  const {
+    models: allModels,
+    fromCache,
+    count,
+  } = await getAllModels({
     enabled: config.discoveryEnabled,
     cacheTtlMs: config.discoveryCacheTtlMs,
     publishers: config.discoveryPublishers,

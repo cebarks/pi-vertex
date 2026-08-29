@@ -26,6 +26,12 @@
   },
   "overrides": [
     {
+      "include": ["package.json"],
+      "formatter": {
+        "enabled": false
+      }
+    },
+    {
       "include": ["tests/**"],
       "linter": {
         "rules": {

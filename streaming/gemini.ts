@@ -8,11 +8,11 @@
  * - Usage tracking including thinking tokens
  */
 
-import { FinishReason, GoogleGenAI, ThinkingLevel } from "@google/genai";
 import {
   type AssistantMessageEventStream,
   createAssistantMessageEventStream,
 } from "@earendil-works/pi-ai";
+import { FinishReason, GoogleGenAI, ThinkingLevel } from "@google/genai";
 import { getAuthConfig, resolveLocation } from "../auth.js";
 import type { AssistantMessage, Context, StreamOptions, VertexModelConfig } from "../types.js";
 import {
