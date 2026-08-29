@@ -2,6 +2,42 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.2] - 2026-08-29
+### Fixed
+- **`streamSimpleOpenAICompletions` is imported from `@earendil-works/pi-ai/compat`.** The bare specifier resolves to `pi-ai/dist/index.js` under plain Node, which does not re-export it — only pi's extension loader aliases root → compat (`getAliases()` for node mode, `VIRTUAL_MODULES` for the compiled binary). The previous top-level `require("@earendil-works/pi-ai")` therefore worked inside pi but threw `ERR_MODULE_NOT_FOUND: No "exports" main defined` under Node, which made `tests/streaming-maas.test.ts` impossible to collect. `/compat` is present in both pi maps *and* in pi-ai's `exports`, so the MaaS path is now importable everywhere and the loose hand-written function signature (plus its `eslint-disable` for `no-require-imports`) is gone — `tsc` type-checks the real call site.
+- **`npm run check` passes on `main`.** Import ordering and formatting had drifted in `index.ts`, `models/index.ts`, `discovery.ts`, `streaming/gemini.ts` and `tests/models.test.ts` — invisible because GitHub Actions has never executed on this fork.
+- **Stale `require("node:fs")`** in the discovery cache write-cleanup replaced with the `unlinkSync` already imported at the top of the file.
+
+### Changed
+- `probeAll()` hands work to its 8 workers from a shared cursor instead of `queue.shift()!`: no non-null assertion (the last `biome check` failure in application code) and no O(n) shift per item.
+- **Test suite is hermetic to the developer's environment.** `tests/auth.test.ts` now builds its `process.env` baseline with `GOOGLE_CLOUD_PROJECT`, `GCLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, `CLOUD_ML_REGION` and `GOOGLE_APPLICATION_CREDENTIALS` removed. Those tests assert on fallback *order*, so a shell that exports a real project ID inverted two of them (`resolveProjectId()` returned the ambient project, `resolveLocation()` the ambient region). Test count: 93 passing across 8 files.
+- `biome.json` disables the formatter for `package.json`. npm rewrites that file on every `npm version` and re-expands short arrays onto separate lines, which biome then reports as a format error — a release bump should not redden CI.
+
+## [2.1.1] - 2026-08-25
+### Fixed
+- `streamSimpleOpenAICompletions` reached through a `require()` of the root `@earendil-works/pi-ai` specifier, sidestepping pi's jiti module map not exposing `pi-ai/api/*` subpaths. Superseded in 2.1.2 by the `/compat` subpath import, which resolves under both pi and plain Node.
+
+## [2.1.0] - 2026-08-25
+### Changed
+- Dependencies and peer dependencies moved from the `@mariozechner/pi-*` scope to `@earendil-works/pi-*` (pi-ai, pi-coding-agent).
+- `npm audit` findings cleared, with `protobufjs` ^7.6.5, `ws` ^8.21.0 and `uuid` ^11.1.1 pinned via `overrides`.
+
+## [2.0.1] - 2026-08-25
+### Added
+- `/vertex-refresh` command: clears the discovery cache, re-probes, rebuilds the id → model lookup used by `streamSimple`, and reports the resulting model list in-session.
+
+## [2.0.0] - 2026-08-25
+### Added
+- **Dynamic model discovery** (`discovery.ts`): lists `publishers/{publisher}/models` (v1beta1) for 11 publishers, filters non-chat models, then enriches each hit with static metadata or publisher defaults. Results cached to `~/.pi/agent/cache/pi-vertex-models.json` (24 h TTL) and used to build the registered model set at startup; falls back to the static table when discovery is disabled or yields nothing. Configured by `discoveryEnabled`, `discoveryCacheTtlMs`, `discoveryPublishers`.
+- Startup widget line reporting project, registered model count and whether discovery came from cache; cleared on first user input.
+- `claude-opus-4-8` and `claude-sonnet-5` (static table now 45 models).
+### Changed
+- **Probe-based availability**: each discovered model is checked with a `countTokens` request against the user's project instead of being filtered down to the static table, so models Google enables appear without a code change and unreachable ones are not offered. (Replaces the short-lived "register only models present in the static table" behaviour.)
+- Claude 4.5 and below send the legacy `thinking: {type: "enabled", budget_tokens}` config; adaptive thinking stays on 4.6+.
+### Fixed
+- Model `baseUrl` is `undefined` rather than `""`, so pi's provider-level `baseUrl` fallback wins instead of being short-circuited by the empty string.
+- Gemini `maxTokens` 65,536 → 65,535: Vertex treats the output bound as exclusive, so the previous value was rejected.
+
 ## [1.1.9] - 2026-05-20
 ### Added
 - **Gemini 3.5 Flash** (`gemini-3.5-flash`) — GA Vertex model with 1M input context, 65,535 max output tokens, reasoning, tool support, and $1.50/$9.00 per 1M token global pricing.

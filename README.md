@@ -1,6 +1,7 @@
 # pi-vertex
 
 [![npm version](https://img.shields.io/npm/v/@cebarks/pi-vertex)](https://www.npmjs.com/package/@cebarks/pi-vertex)
+[![CI](https://github.com/cebarks/pi-vertex/actions/workflows/ci.yml/badge.svg)](https://github.com/cebarks/pi-vertex/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 A Google Vertex AI provider for the [Pi Coding Agent](https://pi.dev) — Gemini, Claude, Llama, DeepSeek, Qwen, Mistral and the rest of the Vertex Model Garden behind a single provider, billed through your GCP project, with **dynamic model discovery** so models that are enabled in *your* project show up in the selector without a code change or a release.
@@ -37,7 +38,7 @@ The reason for the second fork is discovery. Up to v1.1.9 the model list was a h
 
 ### Carried over from the previous fork
 
-Standalone repo; ~90 unit tests (auth, config, utils, model integrity, `convertToGeminiMessages`, streaming dispatch, mocked Gemini + MaaS streams); Biome lint/format; GitHub Actions workflow for type-check, lint, coverage; real `build`/`check`/`test` scripts; Anthropic stream lifecycle fixed to `end()` exactly once; hardcoded `maxTokens / 2` halving removed; regional Claude pricing (`costRegional`) applied when the resolved endpoint isn't global; Gemini cache-token accounting, image tool-result replay, missing-tool-result synthesis, and safety/blocked finish handling.
+Standalone repo; 93 unit tests (auth, config, utils, model integrity, `convertToGeminiMessages`, streaming dispatch, mocked Gemini + MaaS streams); Biome lint/format; GitHub Actions workflow for type-check, lint, coverage; real `build`/`check`/`test` scripts; Anthropic stream lifecycle fixed to `end()` exactly once; hardcoded `maxTokens / 2` halving removed; regional Claude pricing (`costRegional`) applied when the resolved endpoint isn't global; Gemini cache-token accounting, image tool-result replay, missing-tool-result synthesis, and safety/blocked finish handling.
 
 ### Provenance
 
@@ -290,12 +291,12 @@ npm test              # vitest run
 npm run test:coverage
 ```
 
-The GitHub Actions workflow (`.github/workflows/ci.yml`) runs type-check + lint and tests + coverage upload. Two things worth knowing before you trust either number:
+The GitHub Actions workflow (`.github/workflows/ci.yml`) runs `build` + `check` in one job and `test:coverage` (with a coverage artifact) in another, on every push and PR touching `main`.
 
-- Actions does not run automatically on a fork until it is enabled in the repo's Settings → Actions → General; check `gh run list -R cebarks/pi-vertex` before assuming the badge reflects reality.
-- `npm test` passes cleanly only in an environment without a real `~/.pi/agent/settings/pi-vertex.json` or gcloud ADC: `tests/auth.test.ts` asserts on `resolveProjectId()`/`resolveLocation()` fallbacks, and `loadConfig()` picks up your actual settings file, so a few assertions pick up local values instead of the mocked ones. `tests/streaming-maas.test.ts` additionally cannot be collected under plain Node — `streaming/maas.ts` reaches `streamSimpleOpenAICompletions` through a `require()` of pi's root compat entrypoint, which exists only inside pi's jiti virtual-module map.
+Two conventions worth knowing if you touch this code:
 
-Both are test-harness gaps, not runtime bugs; `index.ts` works under pi because pi provides that module map.
+- `tests/auth.test.ts` rebuilds `process.env` from a baseline with `GOOGLE_CLOUD_PROJECT`, `GCLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, `CLOUD_ML_REGION` and `GOOGLE_APPLICATION_CREDENTIALS` stripped. Every assertion there is about fallback *order*, so an ambient value exported by your shell would outrank the fixture and silently invert the test. Keep new auth assertions inside that baseline.
+- `biome.json` disables the formatter for `package.json`: npm rewrites that file on every `npm version` / dependency change, expanding short arrays back onto separate lines, which biome then flags. Same reasoning for `tests/**` and `streaming/maas.ts`, where `noExplicitAny` is off (mock objects, and the Anthropic normalize/replay pipeline — see the note at the top of that file).
 
 ## Dependencies
 
