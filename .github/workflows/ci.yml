@@ -8,6 +8,17 @@ on:
   # Re-run CI on demand without an empty commit.
   workflow_dispatch: {}
 
+# One run per ref: pushing twice in quick succession supersedes the older run
+# instead of burning two runner slots on the same commit series.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least-privilege token: this workflow only reads the repo and publishes a
+# coverage artifact.
+permissions:
+  contents: read
+
 jobs:
   check:
     runs-on: ubuntu-latest
