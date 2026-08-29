@@ -5,6 +5,8 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Re-run CI on demand without an empty commit.
+  workflow_dispatch: {}
 
 jobs:
   check:
