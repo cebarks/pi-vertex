@@ -118,6 +118,47 @@ export function claudeEffortLevels(modelId: string): AnthropicEffortLevel[] {
     : ["low", "medium", "high", "xhigh", "max"];
 }
 
+/** Effort ladder order, lowest to highest spending. */
+const EFFORT_ORDER: AnthropicEffortLevel[] = ["low", "medium", "high", "xhigh", "max"];
+
+/** pi thinking levels are not Anthropic effort names; `minimal` has no Anthropic rung. */
+const PI_LEVEL_TO_EFFORT: Record<string, AnthropicEffortLevel> = {
+  minimal: "low",
+  low: "low",
+  medium: "medium",
+  high: "high",
+  xhigh: "xhigh",
+  max: "max",
+};
+
+/**
+ * Resolve a pi thinking level (or an already-mapped effort string from a model's
+ * thinkingLevelMap) into an effort the model accepts.
+ *
+ * Missing rungs step *up* first, then down: `xhigh` on the 4.6 series becomes `max`
+ * (verified: 4.6 rejects xhigh but accepts max), while `max` on a ladder without it
+ * falls back to `xhigh`. Returns undefined only when the model has no effort parameter.
+ */
+export function mapAnthropicEffort(
+  level: string | undefined,
+  levels: AnthropicEffortLevel[],
+): AnthropicEffortLevel | undefined {
+  if (!level || level === "off" || levels.length === 0) return undefined;
+  const requested = (EFFORT_ORDER as string[]).includes(level)
+    ? (level as AnthropicEffortLevel)
+    : PI_LEVEL_TO_EFFORT[level];
+  if (!requested) return undefined;
+  if (levels.includes(requested)) return requested;
+  const from = EFFORT_ORDER.indexOf(requested);
+  for (let i = from + 1; i < EFFORT_ORDER.length; i++) {
+    if (levels.includes(EFFORT_ORDER[i])) return EFFORT_ORDER[i];
+  }
+  for (let i = from - 1; i >= 0; i--) {
+    if (levels.includes(EFFORT_ORDER[i])) return EFFORT_ORDER[i];
+  }
+  return undefined;
+}
+
 function getGeminiMajorVersion(modelId: string): number | undefined {
   const match = modelId.toLowerCase().match(/^gemini(?:-live)?-(\d+)/);
   return match ? Number.parseInt(match[1], 10) : undefined;

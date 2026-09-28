@@ -47,10 +47,41 @@ import { STATIC_MODELS, getAllModels, getModelById } from "./models/index.js";
 import { streamVertex } from "./streaming/index.js";
 import type { StreamOptions } from "./types.js";
 import type { VertexModelConfig } from "./types.js";
+import { claudeEffortLevels } from "./utils.js";
 
 /**
  * Convert Vertex model config to Pi model format
  */
+/**
+ * pi hides `xhigh`/`max` unless a model declares them (getSupportedThinkingLevels
+ * requires a non-null thinkingLevelMap entry), and pi-vertex models carry real effort
+ * ladders that differ per family — 4.6 rejects xhigh, 4.5-era models take no effort at
+ * all. Values here are what reaches the provider; the extension also clamps defensively.
+ */
+function anthropicThinkingLevelMap(config: VertexModelConfig) {
+  if (config.publisher !== "anthropic" || !config.reasoning) return undefined;
+  const levels = claudeEffortLevels(config.id);
+  if (levels.length === 0) {
+    // Legacy budget thinking: pi level names drive the budget map; no `max` tier exists.
+    return {
+      minimal: "minimal",
+      low: "low",
+      medium: "medium",
+      high: "high",
+      xhigh: "xhigh",
+      max: null,
+    };
+  }
+  return {
+    minimal: "low",
+    low: "low",
+    medium: "medium",
+    high: "high",
+    xhigh: levels.includes("xhigh") ? "xhigh" : null,
+    max: levels.includes("max") ? "max" : null,
+  };
+}
+
 function toPiModel(config: VertexModelConfig): Model<Api> {
   return {
     id: config.id,
@@ -62,6 +93,7 @@ function toPiModel(config: VertexModelConfig): Model<Api> {
     // the falsy check. Actual URLs built in streaming/index.ts.
     baseUrl: undefined as unknown as string,
     reasoning: config.reasoning,
+    thinkingLevelMap: anthropicThinkingLevelMap(config),
     input: config.input,
     cost: config.cost,
     contextWindow: config.contextWindow,

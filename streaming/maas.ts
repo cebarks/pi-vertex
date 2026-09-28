@@ -34,14 +34,11 @@ import {
 import { streamSimpleOpenAICompletions } from "@earendil-works/pi-ai/compat";
 import { buildBaseUrl, getAccessToken, getAuthConfig, resolveLocation } from "../auth.js";
 import type { StreamOptions, TranscriptContext, VertexModelConfig } from "../types.js";
-
-function mapAnthropicEffort(reasoning?: string): "low" | "medium" | "high" | "max" | undefined {
-  if (!reasoning) return undefined;
-  if (reasoning === "minimal" || reasoning === "low") return "low";
-  if (reasoning === "medium") return "medium";
-  if (reasoning === "xhigh") return "max";
-  return "high";
-}
+import {
+  claudeEffortLevels,
+  claudeSupportsAdaptiveThinking,
+  mapAnthropicEffort,
+} from "../utils.js";
 
 /**
  * Sanitize an ID to match Anthropic's pattern: ^[a-zA-Z0-9_-]+$
@@ -322,24 +319,32 @@ async function streamAnthropic(
   };
 
   // Thinking — adaptive (4.6+) vs legacy (4.5 and below)
-  if (model.reasoning && options?.reasoning) {
-    if (model.adaptiveThinking) {
-      // Claude 4.6+: adaptive thinking with effort parameter
-      const effort = mapAnthropicEffort(options.reasoning);
+  const reasoningLevel = options?.reasoning;
+  if (model.reasoning && reasoningLevel) {
+    if (model.adaptiveThinking ?? claudeSupportsAdaptiveThinking(model.id)) {
+      // Claude 4.6+: adaptive thinking with effort clamped to the model's real ladder.
+      const effort = mapAnthropicEffort(reasoningLevel, claudeEffortLevels(model.id));
+      params.thinking = { type: "adaptive" };
       if (effort) {
-        params.thinking = { type: "adaptive" };
         params.output_config = { effort };
       }
     } else {
-      // Claude 4.5 and below: legacy thinking with budget_tokens
+      // Claude 4.5 and below: legacy thinking with budget_tokens.
+      // TODO(debt): Anthropic accepts output_config.effort alongside budget_tokens on
+      // Opus 4.5 only; that model is not enabled in this project (countTokens 404),
+      // so effort stays omitted rather than shipping an unverified parameter.
       const budgetMap: Record<string, number> = {
         minimal: 1024,
         low: 2048,
         medium: 4096,
         high: 8192,
         xhigh: 16384,
+        max: 16384,
       };
-      const budget = budgetMap[options.reasoning] ?? 8192;
+      const budget = Math.max(
+        1024,
+        Math.min(budgetMap[reasoningLevel] ?? 8192, model.maxTokens - 1024),
+      );
       params.thinking = { type: "enabled", budget_tokens: budget };
       // max_tokens must be > budget_tokens for legacy thinking
       if (params.max_tokens <= budget) {

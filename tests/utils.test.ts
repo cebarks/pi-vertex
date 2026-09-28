@@ -7,6 +7,7 @@ import {
   claudeVersion,
   convertTools,
   convertToolsForGemini,
+  mapAnthropicEffort,
   mapStopReason,
   retainThoughtSignature,
   sanitizeText,
@@ -245,5 +246,50 @@ describe("claudeEffortLevels", () => {
   it("returns no effort levels for legacy budget-thinking models", () => {
     expect(claudeEffortLevels("claude-sonnet-4-5")).toEqual([]);
     expect(claudeEffortLevels("claude-haiku-4-5")).toEqual([]);
+  });
+});
+
+describe("mapAnthropicEffort", () => {
+  const full = claudeEffortLevels("claude-opus-5");
+  const noXhigh = claudeEffortLevels("claude-opus-4-6");
+
+  it("maps pi levels onto the model ladder", () => {
+    expect(mapAnthropicEffort("minimal", full)).toBe("low");
+    expect(mapAnthropicEffort("medium", full)).toBe("medium");
+    expect(mapAnthropicEffort("high", full)).toBe("high");
+  });
+
+  it("keeps xhigh as xhigh where supported instead of over-spending at max", () => {
+    expect(mapAnthropicEffort("xhigh", full)).toBe("xhigh");
+  });
+
+  it("steps xhigh up to max on the 4.6 series, which rejects xhigh", () => {
+    expect(mapAnthropicEffort("xhigh", noXhigh)).toBe("max");
+  });
+
+  it("does not downgrade pi max to high", () => {
+    expect(mapAnthropicEffort("max", full)).toBe("max");
+    expect(mapAnthropicEffort("max", noXhigh)).toBe("max");
+  });
+
+  it("accepts effort strings already produced by thinkingLevelMap", () => {
+    expect(mapAnthropicEffort("xhigh", full)).toBe("xhigh");
+    expect(mapAnthropicEffort("low", noXhigh)).toBe("low");
+  });
+
+  it("returns undefined for models without an effort parameter and for off", () => {
+    expect(mapAnthropicEffort("xhigh", [])).toBeUndefined();
+    expect(mapAnthropicEffort("off", full)).toBeUndefined();
+    expect(mapAnthropicEffort(undefined, full)).toBeUndefined();
+    expect(mapAnthropicEffort("bogus", full)).toBeUndefined();
+  });
+});
+
+describe("thinkingLevelMap exposure", () => {
+  it("advertises xhigh/max only where the ladder accepts them", () => {
+    const levelsFor = (id: string) => claudeEffortLevels(id);
+    expect(levelsFor("claude-opus-5").includes("xhigh")).toBe(true);
+    expect(levelsFor("claude-opus-4-6").includes("xhigh")).toBe(false);
+    expect(levelsFor("claude-sonnet-4-5")).toEqual([]);
   });
 });
