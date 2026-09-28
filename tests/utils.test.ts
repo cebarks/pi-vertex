@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { AssistantMessage } from "../types.js";
 import {
   calculateCost,
+  claudeEffortLevels,
+  claudeSupportsAdaptiveThinking,
+  claudeVersion,
   convertTools,
   convertToolsForGemini,
   mapStopReason,
@@ -158,5 +161,89 @@ describe("convertToolsForGemini", () => {
         },
       ],
     });
+  });
+});
+
+describe("claudeVersion", () => {
+  it("parses family-first and version-first ids", () => {
+    expect(claudeVersion("claude-sonnet-4-5")).toEqual({ major: 4, minor: 5 });
+    expect(claudeVersion("claude-opus-4")).toEqual({ major: 4, minor: 0 });
+    expect(claudeVersion("claude-opus-5")).toEqual({ major: 5, minor: 0 });
+    expect(claudeVersion("claude-3-5-sonnet-v2")).toEqual({ major: 3, minor: 5 });
+    expect(claudeVersion("claude-2.1")).toEqual({ major: 2, minor: 1 });
+    expect(claudeVersion("us.anthropic.claude-3-7-sonnet")).toEqual({ major: 3, minor: 7 });
+    expect(claudeVersion("claude-pro-next")).toBeUndefined();
+  });
+});
+
+describe("claudeSupportsAdaptiveThinking", () => {
+  it("returns true for Claude 4.6+ and every Claude 5.x", () => {
+    for (const id of [
+      "claude-opus-4-6",
+      "claude-sonnet-4-6",
+      "claude-opus-4-7",
+      "claude-opus-4-8",
+      "claude-sonnet-5",
+      "claude-opus-5",
+      "claude-opus-5-5",
+      "claude-fable-5",
+      "claude-fable-5-1",
+    ]) {
+      expect(claudeSupportsAdaptiveThinking(id), id).toBe(true);
+    }
+  });
+
+  it("returns false for Claude 4.5 and older", () => {
+    for (const id of [
+      "claude-sonnet-4-5",
+      "claude-haiku-4-5",
+      "claude-opus-4-5",
+      "claude-opus-4-1",
+      "claude-opus-4",
+      "claude-sonnet-4",
+      "claude-3-5-sonnet-v2",
+      "claude-3-7-sonnet",
+    ]) {
+      expect(claudeSupportsAdaptiveThinking(id), id).toBe(false);
+    }
+  });
+
+  it("defaults to adaptive for unparseable claude ids (new releases are 4.6+)", () => {
+    expect(claudeSupportsAdaptiveThinking("claude-pro-next")).toBe(true);
+  });
+
+  it("returns false for non-claude ids", () => {
+    expect(claudeSupportsAdaptiveThinking("gemini-2.5-pro")).toBe(false);
+    expect(claudeSupportsAdaptiveThinking("deepseek-r1")).toBe(false);
+  });
+});
+
+describe("claudeEffortLevels", () => {
+  it("omits xhigh on the 4.6 series (Vertex returns 400 for xhigh)", () => {
+    expect(claudeEffortLevels("claude-opus-4-6")).toEqual(["low", "medium", "high", "max"]);
+    expect(claudeEffortLevels("claude-sonnet-4-6")).toEqual(["low", "medium", "high", "max"]);
+  });
+
+  it("offers the full ladder on 4.7+ and 5.x", () => {
+    expect(claudeEffortLevels("claude-opus-4-7")).toEqual([
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+    ]);
+    expect(claudeEffortLevels("claude-opus-5")).toEqual(["low", "medium", "high", "xhigh", "max"]);
+    expect(claudeEffortLevels("claude-sonnet-5")).toEqual([
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+    ]);
+  });
+
+  it("returns no effort levels for legacy budget-thinking models", () => {
+    expect(claudeEffortLevels("claude-sonnet-4-5")).toEqual([]);
+    expect(claudeEffortLevels("claude-haiku-4-5")).toEqual([]);
   });
 });

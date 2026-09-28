@@ -56,6 +56,68 @@ export function retainThoughtSignature(
   return existing;
 }
 
+/** Accepted `output_config.effort` values on Anthropic's Messages API. */
+export type AnthropicEffortLevel = "low" | "medium" | "high" | "xhigh" | "max";
+
+/**
+ * Major/minor of a Claude model id, in either naming order: Anthropic moved the version
+ * to the tail for the 4.x/5.x families (`claude-sonnet-4-5`, `claude-opus-4-6`,
+ * `claude-opus-5`) while older models lead with it (`claude-3-5-sonnet-v2`,
+ * `claude-3-7-sonnet`, `claude-2.1`). A missing minor means the family's first release
+ * (`.0`). Bedrock-style `us.anthropic.` prefixes are stripped before matching.
+ */
+export function claudeVersion(modelId: string): { major: number; minor: number } | undefined {
+  const id = modelId.toLowerCase().replace(/^us\.anthropic\./, "");
+  const versionFirst = /^claude-(\d+)(?:[.-](\d+))?/.exec(id);
+  if (versionFirst) {
+    return {
+      major: Number.parseInt(versionFirst[1], 10),
+      minor: Number.parseInt(versionFirst[2] ?? "0", 10),
+    };
+  }
+  const familyFirst = /^claude-[a-z]+-(\d+)(?:-(\d+))?/.exec(id);
+  if (familyFirst) {
+    return {
+      major: Number.parseInt(familyFirst[1], 10),
+      minor: Number.parseInt(familyFirst[2] ?? "0", 10),
+    };
+  }
+  return undefined;
+}
+
+/**
+ * Adaptive thinking (`thinking: {type: "adaptive"}` + `output_config.effort`) is the only
+ * mode Claude 4.6 and newer accept, and is rejected by 4.5 and older, which require
+ * `enabled` + `budget_tokens`. Verified against the Vertex global endpoint on 2026-09-28:
+ * claude-opus-5 / claude-sonnet-5 / claude-opus-4-8 400 on `enabled`, while
+ * claude-sonnet-4-5 / claude-haiku-4-5 400 on `adaptive`.
+ *
+ * Unparseable claude ids default to adaptive: an id we have never seen is far more likely
+ * to be a newer release than a pre-4.6 one. The static table overrides this when needed.
+ */
+export function claudeSupportsAdaptiveThinking(modelId: string): boolean {
+  if (!modelId.toLowerCase().includes("claude")) return false;
+  const version = claudeVersion(modelId);
+  if (!version) return true;
+  return version.major > 4 || (version.major === 4 && version.minor >= 6);
+}
+
+/**
+ * The effort ladder a model actually accepts. The 4.6 series rejects `xhigh` with
+ * "This model does not support effort level 'xhigh'. Supported levels: high, low, max,
+ * medium"; 4.7+ and the 5 series accept all five. Legacy budget models have no effort
+ * parameter at all (Opus 4.5 is the documented exception — see the TODO(debt) in
+ * streaming/maas.ts).
+ */
+export function claudeEffortLevels(modelId: string): AnthropicEffortLevel[] {
+  if (!claudeSupportsAdaptiveThinking(modelId)) return [];
+  const version = claudeVersion(modelId);
+  const rejectsXhigh = version?.major === 4 && version?.minor === 6;
+  return rejectsXhigh
+    ? ["low", "medium", "high", "max"]
+    : ["low", "medium", "high", "xhigh", "max"];
+}
+
 function getGeminiMajorVersion(modelId: string): number | undefined {
   const match = modelId.toLowerCase().match(/^gemini(?:-live)?-(\d+)/);
   return match ? Number.parseInt(match[1], 10) : undefined;

@@ -20,6 +20,7 @@ import {
 import { join } from "node:path";
 import { getAccessToken, resolveProjectId } from "./auth.js";
 import type { EndpointType, ModelCost, ModelInputType, VertexModelConfig } from "./types.js";
+import { claudeSupportsAdaptiveThinking } from "./utils.js";
 
 // --- Types ---
 
@@ -31,7 +32,7 @@ export interface DiscoveredModel {
   modelId: string;
 }
 
-interface CachedAvailableModel {
+export interface CachedAvailableModel {
   publisher: string;
   modelId: string;
   versionId: string;
@@ -459,7 +460,10 @@ export function buildModelConfigs(
         input: [...defaults.input],
         reasoning: defaults.reasoning,
         tools: defaults.tools,
-        adaptiveThinking: defaults.adaptiveThinking,
+        adaptiveThinking:
+          am.publisher === "anthropic"
+            ? claudeSupportsAdaptiveThinking(am.modelId)
+            : defaults.adaptiveThinking,
         cost: { ...defaults.cost },
         region: "global",
       });
