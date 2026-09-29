@@ -25,7 +25,17 @@ describe("auth", () => {
   const originalEnv = process.env;
 
   beforeEach(() => {
-    process.env = { ...originalEnv };
+    // Scrub the vars this suite asserts on. Copying the ambient environment
+    // verbatim lets a real gcloud/ADC setup on the host leak in and break the
+    // fallback ordering tests (they only passed on machines with no gcloud config).
+    const {
+      GOOGLE_CLOUD_PROJECT: _googleProject,
+      GCLOUD_PROJECT: _gcloudProject,
+      GOOGLE_CLOUD_LOCATION: _googleLocation,
+      CLOUD_ML_REGION: _cloudMlRegion,
+      ...scrubbedEnv
+    } = originalEnv;
+    process.env = { ...scrubbedEnv };
     vi.resetAllMocks();
     vi.mocked(loadConfig).mockReturnValue({});
   });
