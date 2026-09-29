@@ -8,13 +8,21 @@
  * - Usage tracking including thinking tokens
  */
 
-import { FinishReason, GoogleGenAI, ThinkingLevel } from "@google/genai";
 import {
   type AssistantMessageEventStream,
+  type JsonObject,
   createAssistantMessageEventStream,
+  getCurrentSystemPrompt,
+  getCurrentTools,
 } from "@earendil-works/pi-ai";
+import { FinishReason, GoogleGenAI, ThinkingLevel } from "@google/genai";
 import { getAuthConfig, resolveLocation } from "../auth.js";
-import type { AssistantMessage, Context, StreamOptions, VertexModelConfig } from "../types.js";
+import type {
+  AssistantMessage,
+  StreamOptions,
+  TranscriptContext,
+  VertexModelConfig,
+} from "../types.js";
 import {
   calculateCost,
   convertToGeminiMessages,
@@ -65,7 +73,7 @@ function mapGeminiStopReason(reason: string): "stop" | "length" | "toolUse" | "e
 
 export function streamGemini(
   model: VertexModelConfig,
-  context: Context,
+  context: TranscriptContext,
   options?: StreamOptions,
 ): AssistantMessageEventStream {
   const stream = createAssistantMessageEventStream();
@@ -102,6 +110,12 @@ export function streamGemini(
         apiVersion: "v1",
       });
 
+      // pi-ai >= 0.87 carries the prompt and tool declarations as SystemMessage
+      // entries in the transcript. convertToGeminiMessages drops system-role
+      // messages, so replay them here or the request goes out with neither.
+      const systemPrompt = getCurrentSystemPrompt(context.messages);
+      const currentTools = getCurrentTools(context.messages);
+
       // Convert messages with model ID for proper thinking/tool handling
       const contents = convertToGeminiMessages(context.messages, model.apiId);
 
@@ -114,13 +128,13 @@ export function streamGemini(
       };
 
       // Add system prompt if present
-      if (context.systemPrompt) {
-        config.systemInstruction = sanitizeText(context.systemPrompt);
+      if (systemPrompt) {
+        config.systemInstruction = sanitizeText(systemPrompt);
       }
 
       // Add tools if present (using parametersJsonSchema for full JSON Schema support)
-      if (context.tools && context.tools.length > 0) {
-        config.tools = convertToolsForGemini(context.tools);
+      if (currentTools.length > 0) {
+        config.tools = convertToolsForGemini(currentTools);
       }
 
       // Add thinking configuration (matches pi-mono's buildParams logic)
@@ -309,7 +323,7 @@ export function streamGemini(
                 type: "toolCall" as const,
                 id: toolCallId,
                 name: part.functionCall.name || "",
-                arguments: (part.functionCall.args as Record<string, unknown>) ?? {},
+                arguments: (part.functionCall.args as JsonObject) ?? {},
                 ...(part.thoughtSignature && { thoughtSignature: part.thoughtSignature }),
               };
 

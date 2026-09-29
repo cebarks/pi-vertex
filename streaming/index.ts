@@ -3,13 +3,13 @@
  */
 
 import type { AssistantMessageEventStream } from "@earendil-works/pi-ai";
-import type { Context, StreamOptions, VertexModelConfig } from "../types.js";
+import type { StreamOptions, TranscriptContext, VertexModelConfig } from "../types.js";
 import { streamGemini } from "./gemini.js";
 import { streamMaaS } from "./maas.js";
 
 export function streamVertex(
   model: VertexModelConfig,
-  context: Context,
+  context: TranscriptContext,
   options?: StreamOptions,
 ): AssistantMessageEventStream {
   switch (model.endpointType) {

@@ -1,6 +1,13 @@
+import { Type, normalizeContext } from "@earendil-works/pi-ai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { streamGemini } from "../streaming/gemini.js";
-import type { AssistantMessageEvent, Context, VertexModelConfig } from "../types.js";
+import type {
+  AssistantMessageEvent,
+  Message,
+  Tool,
+  TranscriptContext,
+  VertexModelConfig,
+} from "../types.js";
 
 const mocks = vi.hoisted(() => ({
   generateContentStream: vi.fn(),
@@ -29,7 +36,28 @@ vi.mock("../auth.js", () => ({
   resolveLocation: mocks.resolveLocation,
 }));
 
-const baseContext: Context = { messages: [] };
+// pi-ai >= 0.87 hands providers a TranscriptContext: systemPrompt and tools are
+// folded into a leading SystemMessage by normalizeContext(). Build fixtures
+// through it so tests exercise the production shape.
+function makeContext(
+  init: {
+    systemPrompt?: string;
+    tools?: Tool[];
+    messages?: Message[];
+  } = {},
+): TranscriptContext {
+  return normalizeContext({
+    systemPrompt: init.systemPrompt,
+    tools: init.tools,
+    messages: init.messages ?? [],
+  });
+}
+
+function userMsg(text: string): Message {
+  return { role: "user", content: text, timestamp: Date.now() };
+}
+
+const baseContext: TranscriptContext = makeContext();
 
 function makeModel(overrides: Partial<VertexModelConfig> = {}): VertexModelConfig {
   return {
@@ -195,5 +223,66 @@ describe("streamGemini", () => {
       expect(last.reason).toBe("error");
       expect(last.error.errorMessage).toBe("Content blocked by safety filters");
     }
+  });
+});
+
+describe("streamGemini — transcript context (system prompt + tools)", () => {
+  const bashTool: Tool = {
+    name: "bash",
+    description: "Execute a shell command",
+    parameters: Type.Object({ command: Type.String() }),
+  };
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mocks.resolveLocation.mockImplementation((region?: string) => region ?? "us-central1");
+    mocks.getAuthConfig.mockReturnValue({ projectId: "test-project", location: "global" });
+    mocks.googleGenAI.mockImplementation(() => ({
+      models: { generateContentStream: mocks.generateContentStream },
+    }));
+    mocks.generateContentStream.mockReturnValue(
+      chunks([{ candidates: [{ finishReason: "STOP" }] }]),
+    );
+  });
+
+  /** The config object pi-vertex handed to generateContentStream(). */
+  function sentConfig(): Record<string, any> {
+    const call = mocks.generateContentStream.mock.calls[0];
+    if (!call) throw new Error("generateContentStream was never called");
+    return (call[0] as any).config;
+  }
+
+  it("sets systemInstruction from the leading system message", async () => {
+    await collectEvents(
+      streamGemini(
+        makeModel(),
+        makeContext({ systemPrompt: "You are pi.", messages: [userMsg("hi")] }),
+      ),
+    );
+
+    expect(sentConfig().systemInstruction).toBe("You are pi.");
+  });
+
+  it("declares tools carried by toolsAdded", async () => {
+    await collectEvents(
+      streamGemini(makeModel(), makeContext({ tools: [bashTool], messages: [userMsg("hi")] })),
+    );
+
+    const decls = sentConfig().tools?.[0]?.functionDeclarations;
+    expect(decls).toHaveLength(1);
+    expect(decls[0].name).toBe("bash");
+    expect(decls[0].parametersJsonSchema).toMatchObject({
+      type: "object",
+      properties: { command: { type: "string" } },
+      required: ["command"],
+    });
+  });
+
+  it("omits systemInstruction and tools when the transcript has no system message", async () => {
+    await collectEvents(streamGemini(makeModel(), makeContext({ messages: [userMsg("hi")] })));
+
+    const config = sentConfig();
+    expect(config).not.toHaveProperty("systemInstruction");
+    expect(config).not.toHaveProperty("tools");
   });
 });

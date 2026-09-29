@@ -1,6 +1,7 @@
+import { normalizeContext } from "@earendil-works/pi-ai";
 import { describe, expect, it, vi } from "vitest";
 import { streamVertex } from "../streaming/index.js";
-import type { Context, StreamOptions, VertexModelConfig } from "../types.js";
+import type { StreamOptions, TranscriptContext, VertexModelConfig } from "../types.js";
 
 // Mock the underlying streamers so we only test dispatch logic
 vi.mock("../streaming/gemini.js", () => ({
@@ -18,7 +19,7 @@ vi.mock("../streaming/maas.js", () => ({
 import { streamGemini } from "../streaming/gemini.js";
 import { streamMaaS } from "../streaming/maas.js";
 
-const baseContext: Context = { messages: [] };
+const baseContext: TranscriptContext = normalizeContext({ messages: [] });
 const baseOptions: StreamOptions = {};
 
 function makeModel(endpointType: "gemini" | "maas", id = "test-model"): VertexModelConfig {

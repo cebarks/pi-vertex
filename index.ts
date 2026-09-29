@@ -33,6 +33,7 @@
  */
 
 import type { Api, Context, Model } from "@earendil-works/pi-ai";
+import { normalizeContext } from "@earendil-works/pi-ai";
 import type {
   ExtensionAPI,
   ExtensionContext,
@@ -41,8 +42,8 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import { hasAdcCredentials, resolveProjectId } from "./auth.js";
 import { getConfigPath, loadConfig } from "./config.js";
-import { getAllModels, getModelById, STATIC_MODELS } from "./models/index.js";
 import { clearCache } from "./discovery.js";
+import { STATIC_MODELS, getAllModels, getModelById } from "./models/index.js";
 import { streamVertex } from "./streaming/index.js";
 import type { StreamOptions } from "./types.js";
 import type { VertexModelConfig } from "./types.js";
@@ -97,7 +98,11 @@ export default async function (pi: ExtensionAPI) {
   }
 
   // Discover available models (list + probe, cached to disk)
-  const { models: allModels, fromCache, count } = await getAllModels({
+  const {
+    models: allModels,
+    fromCache,
+    count,
+  } = await getAllModels({
     enabled: config.discoveryEnabled,
     cacheTtlMs: config.discoveryCacheTtlMs,
     publishers: config.discoveryPublishers,
@@ -113,13 +118,18 @@ export default async function (pi: ExtensionAPI) {
     api: "vertex-unified",
     models: allModels.map(toPiModel),
 
+    // pi types this callback's context as the legacy `Context`, but since pi-ai
+    // 0.87 the runtime hands providers a branded `TranscriptContext` whose system
+    // prompt and tools live inside `messages`. normalizeContext() is idempotent on
+    // a TranscriptContext and folds a legacy Context, so it is correct for both
+    // and gives everything downstream the branded type.
     streamSimple: (model: Model<Api>, context: Context, options?: StreamOptions) => {
       const vertexModel = modelById.get(model.id) ?? getModelById(model.id);
       if (!vertexModel) {
         throw new Error(`Unknown Vertex model: ${model.id}`);
       }
 
-      return streamVertex(vertexModel, context, options);
+      return streamVertex(vertexModel, normalizeContext(context), options);
     },
   });
 

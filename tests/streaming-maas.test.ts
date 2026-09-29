@@ -1,5 +1,13 @@
+import { Type } from "@earendil-works/pi-ai";
+import { normalizeContext } from "@earendil-works/pi-ai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { AssistantMessageEvent, Context, VertexModelConfig } from "../types.js";
+import type {
+  AssistantMessageEvent,
+  Message,
+  Tool,
+  TranscriptContext,
+  VertexModelConfig,
+} from "../types.js";
 
 const mocks = vi.hoisted(() => ({
   // @anthropic-ai/vertex-sdk
@@ -18,8 +26,12 @@ vi.mock("@anthropic-ai/vertex-sdk", () => ({
   AnthropicVertex: mocks.anthropicVertex,
 }));
 
-vi.mock("@earendil-works/pi-ai", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@earendil-works/pi-ai")>();
+// streamSimpleOpenAICompletions is imported from the compat subpath, so that is
+// the module to intercept. The root export is deliberately left unmocked: the
+// transcript replay helpers (normalizeContext, getCurrentSystemPrompt,
+// getCurrentTools) must be the real implementations.
+vi.mock("@earendil-works/pi-ai/compat", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@earendil-works/pi-ai/compat")>();
   return {
     ...actual,
     streamSimpleOpenAICompletions: mocks.streamSimpleOpenAICompletions,
@@ -36,7 +48,28 @@ vi.mock("../auth.js", () => ({
 // Import AFTER mocks are registered
 import { streamMaaS } from "../streaming/maas.js";
 
-const baseContext: Context = { messages: [] };
+// pi-ai >= 0.87 hands providers a TranscriptContext: systemPrompt and tools are
+// folded into a leading SystemMessage by normalizeContext(). Always build fixtures
+// through it so tests exercise the same shape production sees.
+function makeContext(
+  init: {
+    systemPrompt?: string;
+    tools?: Tool[];
+    messages?: Message[];
+  } = {},
+): TranscriptContext {
+  return normalizeContext({
+    systemPrompt: init.systemPrompt,
+    tools: init.tools,
+    messages: init.messages ?? [],
+  });
+}
+
+const baseContext: TranscriptContext = makeContext();
+
+function userMsg(text: string): Message {
+  return { role: "user", content: text, timestamp: Date.now() };
+}
 
 function makeAnthropicModel(overrides: Partial<VertexModelConfig> = {}): VertexModelConfig {
   return {
@@ -315,5 +348,174 @@ describe("streamMaaS — OpenAI-compat path", () => {
 
     // The outer wrapper rewrites .model to the public id (not the apiId).
     expect(done.message.model).toBe("llama-4-scout");
+  });
+});
+
+describe("streamMaaS — transcript context (system prompt + tools)", () => {
+  const bashTool: Tool = {
+    name: "bash",
+    description: "Execute a shell command",
+    parameters: Type.Object({ command: Type.String() }),
+  };
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mocks.resolveLocation.mockImplementation((region?: string) => region ?? "us-central1");
+    mocks.getAuthConfig.mockReturnValue({ projectId: "test-project", location: "global" });
+    mocks.anthropicVertex.mockImplementation(() => ({
+      messages: { stream: mocks.anthropicStream },
+    }));
+    mocks.anthropicStream.mockReturnValue(
+      asyncIter([
+        {
+          type: "message_start",
+          message: {
+            id: "msg_ctx",
+            usage: { input_tokens: 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+          },
+        },
+        { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 1 } },
+      ]),
+    );
+  });
+
+  /** The params object pi-vertex handed to AnthropicVertex.messages.stream(). */
+  function sentParams(): Record<string, any> {
+    const call = mocks.anthropicStream.mock.calls[0];
+    if (!call) throw new Error("AnthropicVertex.messages.stream was never called");
+    return call[0] as Record<string, any>;
+  }
+
+  it("sends the system prompt carried by the leading system message", async () => {
+    await collectEvents(
+      streamMaaS(
+        makeAnthropicModel(),
+        makeContext({ systemPrompt: "You are pi.", messages: [userMsg("hi")] }),
+      ),
+    );
+
+    expect(sentParams().system).toBe("You are pi.");
+  });
+
+  it("sends tool declarations carried by toolsAdded", async () => {
+    await collectEvents(
+      streamMaaS(
+        makeAnthropicModel(),
+        makeContext({ tools: [bashTool], messages: [userMsg("hi")] }),
+      ),
+    );
+
+    const tools = sentParams().tools;
+    expect(tools).toHaveLength(1);
+    expect(tools[0].name).toBe("bash");
+    expect(tools[0].description).toBe("Execute a shell command");
+    expect(tools[0].input_schema).toMatchObject({
+      type: "object",
+      properties: { command: { type: "string" } },
+      required: ["command"],
+    });
+  });
+
+  it("never leaks a system-role message into the Anthropic messages array", async () => {
+    await collectEvents(
+      streamMaaS(
+        makeAnthropicModel(),
+        makeContext({
+          systemPrompt: "You are pi.",
+          tools: [bashTool],
+          messages: [userMsg("hi")],
+        }),
+      ),
+    );
+
+    const messages = sentParams().messages;
+    expect(messages).toHaveLength(1);
+    expect(messages[0].role).toBe("user");
+  });
+
+  it("resolves mid-conversation tool deltas when replaying the transcript", async () => {
+    // pi emits later system messages carrying toolsAdded / toolsRemoved. The
+    // request must carry the resolved current set, not just the leading one.
+    const grepTool: Tool = {
+      name: "grep",
+      description: "Search text",
+      parameters: Type.Object({ pattern: Type.String() }),
+    };
+    const ctx = makeContext({ tools: [bashTool], messages: [userMsg("hi")] });
+    ctx.messages.push({
+      role: "system",
+      content: "",
+      toolsAdded: [grepTool],
+      timestamp: Date.now(),
+    } as Message);
+    ctx.messages.push({
+      role: "system",
+      content: "",
+      toolsRemoved: [{ name: "bash" }],
+      timestamp: Date.now(),
+    } as Message);
+
+    await collectEvents(streamMaaS(makeAnthropicModel(), ctx));
+
+    expect((sentParams().tools ?? []).map((t: any) => t.name)).toEqual(["grep"]);
+  });
+
+  it("sanitizes tool names Anthropic rejects and maps them back on the response", async () => {
+    // Anthropic requires tools.N.name to match ^[a-zA-Z0-9_-]{1,128}$; one bad
+    // name 400s the whole request and takes every tool down with it.
+    const namespaced: Tool = {
+      name: "mcp:server.some-tool",
+      description: "Namespaced MCP tool",
+      parameters: Type.Object({}),
+    };
+    mocks.anthropicStream.mockReturnValue(
+      asyncIter([
+        {
+          type: "message_start",
+          message: {
+            id: "msg_names",
+            usage: { input_tokens: 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+          },
+        },
+        {
+          type: "content_block_start",
+          index: 0,
+          content_block: {
+            type: "tool_use",
+            id: "toolu_1",
+            name: "mcp_server_some-tool",
+            input: {},
+          },
+        },
+        { type: "content_block_stop", index: 0 },
+        { type: "message_delta", delta: { stop_reason: "tool_use" }, usage: { output_tokens: 1 } },
+      ]),
+    );
+
+    const events = await collectEvents(
+      streamMaaS(
+        makeAnthropicModel(),
+        makeContext({ tools: [namespaced], messages: [userMsg("hi")] }),
+      ),
+    );
+
+    const sent = (sentParams().tools ?? []).map((t: any) => t.name);
+    expect(sent[0]).toMatch(/^[a-zA-Z0-9_-]{1,128}$/);
+
+    // Inbound: pi must see the original name or it cannot dispatch the call.
+    const done = events.find((e) => e.type === "done");
+    if (done?.type !== "done") throw new Error("Expected done event");
+    const call = done.message.content.find((b) => b.type === "toolCall");
+    expect(call?.type === "toolCall" ? call.name : undefined).toBe("mcp:server.some-tool");
+  });
+
+  it("omits system and tools keys when the transcript carries no system message", async () => {
+    await collectEvents(
+      streamMaaS(makeAnthropicModel(), makeContext({ messages: [userMsg("hi")] })),
+    );
+
+    const params = sentParams();
+    expect(params).not.toHaveProperty("system");
+    expect(params).not.toHaveProperty("tools");
   });
 });

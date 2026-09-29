@@ -4,6 +4,12 @@
  * Core message/content types are re-exported from pi-ai to ensure pi-vertex
  * handles the full message structure (thinking blocks, tool calls, tool results)
  * that pi-coding-agent passes through the streamSimple callback.
+ *
+ * Provider callbacks receive a `TranscriptContext`, NOT the legacy `Context`.
+ * Since pi-ai 0.87 the system prompt and tool declarations are carried by
+ * `SystemMessage` entries inside `messages` — `context.systemPrompt` and
+ * `context.tools` no longer exist at runtime. Use pi-ai's replay helpers
+ * (`getCurrentSystemPrompt`, `getCurrentTools`) to read them.
  */
 
 // Re-export core types from pi-ai
@@ -11,15 +17,17 @@ export type {
   AssistantMessage,
   AssistantMessageEvent,
   AssistantMessageEventStream,
-  Context,
   ImageContent,
   Message,
   StopReason,
+  SystemMessage,
   TextContent,
   ThinkingContent,
   Tool,
   ToolCall,
+  ToolReference,
   ToolResultMessage,
+  TranscriptContext,
   Usage,
   UserMessage,
 } from "@earendil-works/pi-ai";

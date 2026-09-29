@@ -16,19 +16,19 @@ import { AnthropicVertex } from "@anthropic-ai/vertex-sdk";
 import {
   type AssistantMessageEventStream,
   type Model,
+  type Tool,
   calculateCost,
   createAssistantMessageEventStream,
+  getCurrentSystemPrompt,
+  getCurrentTools,
 } from "@earendil-works/pi-ai";
-
-// Imported from compat/legacy-api-aliases at runtime via pi's virtual module
-// resolution. The subpath @earendil-works/pi-ai/api/openai-completions isn't
-// in pi's virtual module map, so we import from the root compat entrypoint.
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { streamSimpleOpenAICompletions } = require("@earendil-works/pi-ai") as {
-  streamSimpleOpenAICompletions: (model: Model<any>, context: any, options?: any) => AssistantMessageEventStream;
-};
+// streamSimpleOpenAICompletions only exists on the compat entrypoint, not the root
+// export. Importing it from the root yields undefined, and require() of the root
+// throws ERR_PACKAGE_PATH_NOT_EXPORTED (pi-ai's exports map has no "require"
+// condition), which also breaks vitest collection.
+import { streamSimpleOpenAICompletions } from "@earendil-works/pi-ai/compat";
 import { buildBaseUrl, getAccessToken, getAuthConfig, resolveLocation } from "../auth.js";
-import type { Context, StreamOptions, VertexModelConfig } from "../types.js";
+import type { StreamOptions, TranscriptContext, VertexModelConfig } from "../types.js";
 
 function mapAnthropicEffort(reasoning?: string): "low" | "medium" | "high" | "max" | undefined {
   if (!reasoning) return undefined;
@@ -56,11 +56,50 @@ function isValidThinkingSignature(signature?: string): boolean {
 }
 
 /**
+ * Anthropic requires tools[].name to match ^[a-zA-Z0-9_-]{1,128}$. pi tool names
+ * can carry ":" or "." (MCP-namespaced servers), and one invalid name 400s the
+ * whole request — taking every tool down with it.
+ */
+function sanitizeToolName(name: string): string {
+  const sanitized = String(name ?? "")
+    .replace(/[^a-zA-Z0-9_-]/g, "_")
+    .slice(0, 128);
+  return sanitized || "tool";
+}
+
+/**
+ * Map real tool names onto wire-safe names and back.
+ *
+ * The reverse map matters: without it a response tool_use block carries the
+ * sanitized name and pi cannot dispatch the call. Collisions are disambiguated
+ * with a numeric suffix so two distinct tools never share a wire name.
+ */
+function buildToolNameMap(tools: Tool[]): {
+  wireNames: Map<string, string>;
+  reverse: Map<string, string>;
+} {
+  const wireNames = new Map<string, string>();
+  const reverse = new Map<string, string>();
+  for (const tool of tools) {
+    const base = sanitizeToolName(tool.name);
+    let candidate = base;
+    let n = 2;
+    while (reverse.has(candidate) && reverse.get(candidate) !== tool.name) {
+      candidate = sanitizeToolName(`${base}_${n}`);
+      n++;
+    }
+    wireNames.set(tool.name, candidate);
+    reverse.set(candidate, tool.name);
+  }
+  return { wireNames, reverse };
+}
+
+/**
  * Stream a Claude model via the native AnthropicVertex SDK.
  */
 async function streamAnthropic(
   model: VertexModelConfig,
-  context: Context,
+  context: TranscriptContext,
   options: StreamOptions | undefined,
   stream: ReturnType<typeof createAssistantMessageEventStream>,
 ): Promise<void> {
@@ -77,6 +116,13 @@ async function streamAnthropic(
     region: auth.location,
   });
 
+  // pi-ai >= 0.87 carries the system prompt and tool declarations as
+  // SystemMessage entries inside the transcript rather than as top-level
+  // context fields. Replay every system message to get the current state.
+  const systemPrompt = getCurrentSystemPrompt(context.messages);
+  const currentTools = getCurrentTools(context.messages);
+  const { wireNames: toolNameToWire, reverse: toolNameFromWire } = buildToolNameMap(currentTools);
+
   // Build messages with Anthropic-compatible tool-use/tool-result sequencing.
   const sourceMessages = (context.messages as any[]) ?? [];
 
@@ -84,6 +130,10 @@ async function streamAnthropic(
   const normalized: any[] = [];
   const toolIdMap = new Map<string, string>();
   for (const msg of sourceMessages) {
+    // System messages travel in the `system` request field — Anthropic's
+    // `messages` array has no system role.
+    if (msg.role === "system") continue;
+
     if (msg.role === "assistant" && Array.isArray(msg.content)) {
       const content = msg.content.map((block: any) => {
         if (block?.type !== "toolCall") return block;
@@ -244,14 +294,14 @@ async function streamAnthropic(
     }
   }
 
-  // Build tools
-  const tools = context.tools?.map((t: any) => ({
-    name: t.name,
+  // Build tools from the replayed transcript state, using wire-safe names.
+  const tools = currentTools.map((t) => ({
+    name: toolNameToWire.get(t.name) ?? sanitizeToolName(t.name),
     description: t.description,
     input_schema: {
       type: "object" as const,
-      properties: t.parameters?.properties ?? {},
-      required: t.parameters?.required ?? [],
+      properties: (t.parameters as any)?.properties ?? {},
+      required: (t.parameters as any)?.required ?? [],
     },
   }));
 
@@ -259,8 +309,8 @@ async function streamAnthropic(
     model: model.apiId,
     max_tokens: options?.maxTokens || model.maxTokens,
     messages,
-    ...(context.systemPrompt ? { system: context.systemPrompt } : {}),
-    ...(tools && tools.length > 0 ? { tools } : {}),
+    ...(systemPrompt ? { system: systemPrompt } : {}),
+    ...(tools.length > 0 ? { tools } : {}),
     ...(options?.temperature !== undefined && !options?.reasoning
       ? { temperature: options.temperature }
       : {}),
@@ -346,7 +396,8 @@ async function streamAnthropic(
         output.content.push({
           type: "toolCall",
           id: cb.id,
-          name: cb.name,
+          // Map the wire-safe name back to the real one so pi can dispatch.
+          name: toolNameFromWire.get(cb.name) ?? cb.name,
           arguments: {},
           partialArgs: "",
           index: event.index,
@@ -441,7 +492,7 @@ async function streamAnthropic(
 
 export function streamMaaS(
   model: VertexModelConfig,
-  context: Context,
+  context: TranscriptContext,
   options?: StreamOptions,
 ): AssistantMessageEventStream {
   const stream = createAssistantMessageEventStream();
