@@ -2,6 +2,112 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.0.0] - 2026-09-29
+
+### Fixed
+
+- **System prompt and tools were silently dropped from every request** (all Vertex
+  models, both the Claude/MaaS and Gemini paths). pi-ai 0.87 replaced the provider
+  stream contract: `streamSimple` now receives a branded `TranscriptContext`
+  (`{ messages }` only), and the prompt plus tool declarations are carried by
+  `SystemMessage` entries *inside* `messages`. pi-vertex still read the pre-0.87
+  `context.systemPrompt` and `context.tools` fields, which no longer exist at
+  runtime. Both were inside conditional spreads, so they vanished without an error,
+  and the message-replay loops dropped the leading system message as well. Models
+  answered as bare chat models with no AGENTS.md, no tool schemas, no skills, and
+  no pi conventions — a real request carried ~222 input tokens instead of ~47k.
+  Now replayed through pi-ai's own helpers (`getCurrentSystemPrompt`,
+  `getCurrentTools`), so named prompt sections and mid-conversation
+  `toolsAdded`/`toolsRemoved` deltas resolve correctly too.
+- **`streamSimpleOpenAICompletions` was imported from the wrong entrypoint.** It
+  only exists on `@earendil-works/pi-ai/compat`; the root export has no such
+  symbol, and `require()` of the root throws `ERR_PACKAGE_PATH_NOT_EXPORTED`
+  because pi-ai's exports map defines no `require` condition. That broke the
+  OpenAI-compatible MaaS path (Llama, Mistral, Grok, GLM, …) and made
+  `tests/streaming-maas.test.ts` uncollectable under vitest. v2.1.1 intended this
+  fix but imported from the root.
+- **Tool names Anthropic rejects now get sanitized.** Anthropic requires
+  `tools[].name` to match `^[a-zA-Z0-9_-]{1,128}$`; a single MCP-namespaced name
+  containing `:` or `.` returned 400 and took *every* tool down with it. Names are
+  sanitized outbound and mapped back inbound so pi can still dispatch the call.
+  Collisions are disambiguated with a numeric suffix.
+- Two pre-existing type errors in `streaming/gemini.ts`: pi-ai 0.87 tightened
+  `ToolCall.arguments` from `Record<string, unknown>` to `JsonObject`.
+- `tests/auth.test.ts` no longer fails on machines with a real gcloud/ADC setup.
+  It copied the ambient environment wholesale, so a host `GOOGLE_CLOUD_PROJECT` or
+  `CLOUD_ML_REGION` overrode the values the fallback-ordering tests set.
+
+### Changed
+
+- **BREAKING:** `@earendil-works/pi-ai` and `@earendil-works/pi-coding-agent` peer
+  dependencies are floored at `>=0.87.0` (previously `*`). Hosts older than 0.87
+  pass the legacy `Context` shape and can no longer install this package. The `*`
+  range is what let the contract break silently: dev and test resolved pi-ai 0.84.3
+  from the lockfile while the running host was 0.87.1, so `tsc` and `vitest` were
+  both green against a version production never used. Dev dependencies are now
+  pinned to exact `0.87.1` so typecheck tracks the real host.
+- Provider stream callbacks are typed `TranscriptContext` instead of `Context`, so
+  the compiler enforces the new contract. `index.ts` calls `normalizeContext()` at
+  the extension boundary — idempotent on a `TranscriptContext` and correct for a
+  legacy `Context`, which papers over pi's own stale `ProviderConfig.streamSimple`
+  typing (still declared as `Context` in `model-registry.d.ts`).
+
+### Added
+
+- `scripts/live-probe.ts` — manual, network-gated probe (excluded from `npm test`)
+  that forces a real Vertex call which can only be satisfied by emitting a
+  `tool_use` block. Verified live against `claude-haiku-4-5`, `claude-opus-4-8`
+  (adaptive thinking), `gemini-2.5-flash`, and `gemini-3.5-flash`.
+- 9 regression tests covering the transcript contract on both endpoint types:
+  prompt extraction, `toolsAdded` declarations, mid-conversation tool deltas,
+  system-role messages never leaking into the provider message array, tool-name
+  sanitization round-trip, and the no-system-message case.
+
+## [2.1.1] - 2026-08-25
+
+### Fixed
+
+- Attempted to load `streamSimpleOpenAICompletions` from the compat entrypoint.
+  The import still targeted the root export, so the fix did not take effect until
+  3.0.0.
+
+## [2.1.0] - 2026-08-25
+
+### Changed
+
+- Migrated to the `@earendil-works/pi-ai` package namespace and resolved reported
+  dependency audit vulnerabilities.
+
+## [2.0.1] - 2026-08-25
+
+### Added
+
+- **Probe-based model availability.** Models are now included based on a live
+  `countTokens` probe against the caller's GCP project rather than being filtered
+  by the static table, so newly published Vertex models show up without a release.
+- **`/vertex-refresh` command** to re-probe model availability and update the
+  discovery cache on demand.
+
+### Fixed
+
+- Gemini `maxTokens` 65536 → 65535 (the upper bound is exclusive).
+
+## [2.0.0] - 2026-08-25
+
+### Added
+
+- **Rebranded to `@cebarks/pi-vertex`** as a fork of `@lhl/pi-vertex`.
+- **Dynamic model discovery** via the Vertex AI Model Garden API, with a
+  disk-cached, configurable-TTL result set.
+
+### Fixed
+
+- Use legacy `thinking: { type: "enabled", budget_tokens }` for Claude 4.5 and
+  below; adaptive thinking is a 4.6+ feature.
+- Set `baseUrl` to `undefined` (not `""`) so pi's `applyExtension()` falls through
+  to the provider-level URL — an empty string wins the `??` coalesce but then fails
+  the falsy check.
+
 ## [1.1.9] - 2026-05-20
 ### Added
 - **Gemini 3.5 Flash** (`gemini-3.5-flash`) — GA Vertex model with 1M input context, 65,535 max output tokens, reasoning, tool support, and $1.50/$9.00 per 1M token global pricing.
