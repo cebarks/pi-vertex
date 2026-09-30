@@ -10,9 +10,10 @@
  *   npx tsx scripts/live-probe.ts [modelId]
  */
 
-import { type Tool, normalizeContext } from "@earendil-works/pi-ai";
+import { Type, normalizeContext } from "@earendil-works/pi-ai";
 import { getModelById } from "../models/index.js";
 import { streamVertex } from "../streaming/index.js";
+import type { Tool, Usage } from "../types.js";
 
 const modelId = process.argv[2] ?? "claude-haiku-4-5";
 const model = getModelById(modelId);
@@ -24,11 +25,7 @@ if (!model) {
 const weatherTool: Tool = {
   name: "get_weather",
   description: "Get the current weather for a city. Always use this tool for weather questions.",
-  parameters: {
-    type: "object",
-    properties: { city: { type: "string", description: "City name" } },
-    required: ["city"],
-  } as any,
+  parameters: Type.Object({ city: Type.String({ description: "City name" }) }),
 };
 
 const context = normalizeContext({
@@ -36,18 +33,16 @@ const context = normalizeContext({
     "You are a test harness. You MUST respond by calling the get_weather tool. " +
     "Never answer in plain text.",
   tools: [weatherTool],
-  messages: [
-    { role: "user", content: "What is the weather in Prague?", timestamp: Date.now() },
-  ],
+  messages: [{ role: "user", content: "What is the weather in Prague?", timestamp: Date.now() }],
 });
 
 const stream = streamVertex(model, context, {
   ...(model.reasoning ? { reasoning: "low" as const } : {}),
 });
 
-let toolCalls: Array<{ name: string; args: unknown }> = [];
+const toolCalls: Array<{ name: string; args: unknown }> = [];
 let text = "";
-let usage: any;
+let usage: Usage | undefined;
 let stopReason: string | undefined;
 
 for await (const event of stream) {

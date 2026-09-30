@@ -6,9 +6,9 @@
  * in the user's GCP project via countTokens probing.
  */
 
-import type { VertexModelConfig } from "../types.js";
 import type { DiscoveryOptions } from "../discovery.js";
-import { discoverAvailableModels, buildModelConfigs } from "../discovery.js";
+import { buildModelConfigs, discoverAvailableModels } from "../discovery.js";
+import type { VertexModelConfig } from "../types.js";
 import { CLAUDE_MODELS } from "./claude.js";
 import { GEMINI_MODELS } from "./gemini.js";
 import { MAAS_MODELS } from "./maas.js";

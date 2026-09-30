@@ -9,10 +9,17 @@
  * Results cached to disk for configurable TTL (default 24h).
  */
 
-import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { getAccessToken, resolveProjectId } from "./auth.js";
-import type { VertexModelConfig, ModelCost, EndpointType, ModelInputType } from "./types.js";
+import type { EndpointType, ModelCost, ModelInputType, VertexModelConfig } from "./types.js";
 
 // --- Types ---
 
@@ -70,7 +77,15 @@ const PROBE_TIMEOUT_MS = 5000;
 const PROBE_CONCURRENCY = 8;
 
 /** Model name suffixes/patterns for non-chat models */
-const NON_CHAT_PATTERNS = ["-tts", "-embedding", "-imagen", "text-embedding", "textembedding", "-native-audio", "-image"];
+const NON_CHAT_PATTERNS = [
+  "-tts",
+  "-embedding",
+  "-imagen",
+  "text-embedding",
+  "textembedding",
+  "-native-audio",
+  "-image",
+];
 
 // --- Publisher Defaults ---
 
@@ -175,7 +190,12 @@ function readCache(ttlMs: number): CachedAvailableModel[] | null {
 export function clearCache(): boolean {
   const cachePath = getCachePath();
   if (existsSync(cachePath)) {
-    try { unlinkSync(cachePath); return true; } catch { return false; }
+    try {
+      unlinkSync(cachePath);
+      return true;
+    } catch {
+      return false;
+    }
   }
   return false;
 }
@@ -191,7 +211,11 @@ function writeCache(available: CachedAvailableModel[]): void {
     renameSync(tmpPath, cachePath);
   } catch (err) {
     console.warn(`[pi-vertex] Failed to write discovery cache: ${err}`);
-    try { require("node:fs").unlinkSync(tmpPath); } catch { /* ignore */ }
+    try {
+      unlinkSync(tmpPath);
+    } catch {
+      /* ignore */
+    }
   }
 }
 
@@ -262,9 +286,10 @@ async function probeModelAccess(
   const timeout = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
   try {
     // Global endpoint uses aiplatform.googleapis.com (no region prefix)
-    const baseUrl = region === "global"
-      ? "https://aiplatform.googleapis.com"
-      : `https://${region}-aiplatform.googleapis.com`;
+    const baseUrl =
+      region === "global"
+        ? "https://aiplatform.googleapis.com"
+        : `https://${region}-aiplatform.googleapis.com`;
     const url = `${baseUrl}/v1/projects/${projectId}/locations/${region}/publishers/${publisher}/models/${modelId}:countTokens`;
     const response = await fetch(url, {
       method: "POST",
@@ -301,13 +326,22 @@ async function probeAll(
   projectId: string,
 ): Promise<CachedAvailableModel[]> {
   const available: CachedAvailableModel[] = [];
-  const queue = [...models];
+  // Shared cursor instead of queue.shift(): no non-null assertion, no O(n) copy per
+  // take, and JS's single-threaded event loop makes the read/increment atomic
+  // because nothing yields between them.
+  let cursor = 0;
 
   async function worker() {
-    while (queue.length > 0) {
-      const dm = queue.shift()!;
+    while (cursor < models.length) {
+      const dm = models[cursor++];
       const defaults = PUBLISHER_DEFAULTS[dm.publisher] ?? PUBLISHER_DEFAULTS._default;
-      const ok = await probeModelAccess(dm.publisher, dm.modelId, defaults.probeRegion, accessToken, projectId);
+      const ok = await probeModelAccess(
+        dm.publisher,
+        dm.modelId,
+        defaults.probeRegion,
+        accessToken,
+        projectId,
+      );
       if (ok) {
         available.push({ publisher: dm.publisher, modelId: dm.modelId, versionId: dm.versionId });
       }
@@ -412,9 +446,12 @@ export function buildModelConfigs(
       configs.push({
         id: am.modelId,
         name,
-        apiId: am.publisher === "anthropic"
-          ? (am.versionId !== "default" ? `${am.modelId}@${am.versionId}` : am.modelId)
-          : am.modelId,
+        apiId:
+          am.publisher === "anthropic"
+            ? am.versionId !== "default"
+              ? `${am.modelId}@${am.versionId}`
+              : am.modelId
+            : am.modelId,
         publisher: am.publisher,
         endpointType: defaults.endpointType,
         contextWindow: defaults.contextWindow,

@@ -22,10 +22,15 @@ import {
   getCurrentSystemPrompt,
   getCurrentTools,
 } from "@earendil-works/pi-ai";
-// streamSimpleOpenAICompletions only exists on the compat entrypoint, not the root
-// export. Importing it from the root yields undefined, and require() of the root
-// throws ERR_PACKAGE_PATH_NOT_EXPORTED (pi-ai's exports map has no "require"
-// condition), which also breaks vitest collection.
+// `streamSimpleOpenAICompletions` is only reachable through pi-ai's compat
+// entrypoint: pi aliases the bare specifier to compat at runtime, but plain Node
+// resolves it to dist/index.js, which does not re-export it (importing from the
+// root yields undefined, and require() of the root throws
+// ERR_PACKAGE_PATH_NOT_EXPORTED because pi-ai's exports map has no "require"
+// condition, which also breaks vitest collection). The /compat subpath is present
+// in both of pi's resolution maps (jiti aliases for node mode, virtualModules for
+// the compiled binary) and in pi-ai's package.json exports, so it works under pi,
+// vitest and tsc alike.
 import { streamSimpleOpenAICompletions } from "@earendil-works/pi-ai/compat";
 import { buildBaseUrl, getAccessToken, getAuthConfig, resolveLocation } from "../auth.js";
 import type { StreamOptions, TranscriptContext, VertexModelConfig } from "../types.js";

@@ -63,6 +63,37 @@ All notable changes to this project will be documented in this file.
   system-role messages never leaking into the provider message array, tool-name
   sanitization round-trip, and the no-system-message case.
 
+## [2.1.2] - 2026-08-29
+
+### Fixed
+
+- **`streamSimpleOpenAICompletions` is imported from `@earendil-works/pi-ai/compat`.**
+  The bare specifier resolves to `pi-ai/dist/index.js` under plain Node, which does not
+  re-export it — only pi's extension loader aliases root → compat (`getAliases()` for
+  node mode, `VIRTUAL_MODULES` for the compiled binary). The previous top-level
+  `require("@earendil-works/pi-ai")` therefore worked inside pi but threw
+  `ERR_MODULE_NOT_FOUND: No "exports" main defined` under Node, which made
+  `tests/streaming-maas.test.ts` impossible to collect. `/compat` is present in both pi
+  maps *and* in pi-ai's `exports`, so the MaaS path is importable everywhere.
+- **`npm run check` passes on `main`.** Import ordering and formatting had drifted in
+  `index.ts`, `models/index.ts`, `discovery.ts`, `streaming/gemini.ts` and
+  `tests/models.test.ts` — invisible because GitHub Actions has never executed on this
+  fork.
+- **Stale `require("node:fs")`** in the discovery cache write-cleanup replaced with the
+  `unlinkSync` already imported at the top of the file.
+
+### Changed
+
+- `probeAll()` hands work to its 8 workers from a shared cursor instead of
+  `queue.shift()!`: no non-null assertion and no O(n) shift per item.
+- **Test suite is hermetic to the developer's environment.** `tests/auth.test.ts` builds
+  its `process.env` baseline with `GOOGLE_CLOUD_PROJECT`, `GCLOUD_PROJECT`,
+  `GOOGLE_CLOUD_LOCATION`, `CLOUD_ML_REGION` and `GOOGLE_APPLICATION_CREDENTIALS`
+  removed, so a host gcloud setup can no longer invert the fallback-ordering asserts.
+- `biome.json` disables the formatter for `package.json`: npm rewrites that file on
+  every `npm version` and re-expands short arrays, which biome then reported as a
+  format error — a release bump should not redden CI.
+
 ## [2.1.1] - 2026-08-25
 
 ### Fixed

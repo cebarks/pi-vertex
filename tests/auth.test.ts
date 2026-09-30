@@ -23,19 +23,32 @@ import { loadConfig } from "../config.js";
 
 describe("auth", () => {
   const originalEnv = process.env;
+  /**
+   * Env vars the auth resolvers consult (see the fallback chains in auth.ts).
+   * A developer shell routinely exports these, and every test in this file asserts
+   * on fallback *order*, so they are stripped from the per-test baseline.
+   */
+  const RELEVANT_ENV = new Set([
+    "GOOGLE_CLOUD_PROJECT",
+    "GCLOUD_PROJECT",
+    "GOOGLE_CLOUD_LOCATION",
+    "CLOUD_ML_REGION",
+    "GOOGLE_APPLICATION_CREDENTIALS",
+  ]);
+
+  function testEnv(): NodeJS.ProcessEnv {
+    const baseline: NodeJS.ProcessEnv = {};
+    for (const [key, value] of Object.entries(originalEnv)) {
+      if (!RELEVANT_ENV.has(key)) baseline[key] = value;
+    }
+    return baseline;
+  }
 
   beforeEach(() => {
     // Scrub the vars this suite asserts on. Copying the ambient environment
     // verbatim lets a real gcloud/ADC setup on the host leak in and break the
     // fallback ordering tests (they only passed on machines with no gcloud config).
-    const {
-      GOOGLE_CLOUD_PROJECT: _googleProject,
-      GCLOUD_PROJECT: _gcloudProject,
-      GOOGLE_CLOUD_LOCATION: _googleLocation,
-      CLOUD_ML_REGION: _cloudMlRegion,
-      ...scrubbedEnv
-    } = originalEnv;
-    process.env = { ...scrubbedEnv };
+    process.env = testEnv();
     vi.resetAllMocks();
     vi.mocked(loadConfig).mockReturnValue({});
   });
@@ -64,8 +77,6 @@ describe("auth", () => {
     });
 
     it("returns undefined when nothing is set", () => {
-      process.env.GOOGLE_CLOUD_PROJECT = undefined;
-      process.env.GCLOUD_PROJECT = undefined;
       expect(resolveProjectId()).toBeUndefined();
     });
   });
@@ -89,14 +100,10 @@ describe("auth", () => {
     });
 
     it("uses default when nothing is set", () => {
-      process.env.GOOGLE_CLOUD_LOCATION = undefined;
-      process.env.CLOUD_ML_REGION = undefined;
       expect(resolveLocation()).toBe("us-central1");
     });
 
     it("uses explicit default parameter", () => {
-      process.env.GOOGLE_CLOUD_LOCATION = undefined;
-      process.env.CLOUD_ML_REGION = undefined;
       expect(resolveLocation("europe-west4")).toBe("europe-west4");
     });
   });
@@ -136,8 +143,6 @@ describe("auth", () => {
 
     it("throws when project ID is missing", () => {
       vi.mocked(loadConfig).mockReturnValue({});
-      process.env.GOOGLE_CLOUD_PROJECT = undefined;
-      process.env.GCLOUD_PROJECT = undefined;
 
       expect(() => getAuthConfig()).toThrow("Vertex AI requires a project ID");
     });

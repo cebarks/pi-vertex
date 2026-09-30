@@ -38,7 +38,9 @@ describe("static models", () => {
 
   it("getModelsByEndpointType filters correctly", () => {
     const geminiModels = getModelsByEndpointType("gemini");
-    expect(geminiModels.every((m: { endpointType: string }) => m.endpointType === "gemini")).toBe(true);
+    expect(geminiModels.every((m: { endpointType: string }) => m.endpointType === "gemini")).toBe(
+      true,
+    );
 
     const maasModels = getModelsByEndpointType("maas");
     expect(maasModels.every((m: { endpointType: string }) => m.endpointType === "maas")).toBe(true);
