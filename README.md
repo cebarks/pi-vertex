@@ -20,11 +20,11 @@ Lineage:
 
 1. [`ssweens/pi-packages`](https://github.com/ssweens/pi-packages) — original `@ssweens/pi-vertex`, published inside a mono-repo
 2. [`lhl/pi-vertex`](https://github.com/lhl/pi-vertex) — `git filter-repo` extraction into a standalone repo with tests, lint and CI (`@lhl/pi-vertex`, v1.1.5 → v1.1.9)
-3. **this repo** — [`cebarks/pi-vertex`](https://github.com/cebarks/pi-vertex) (`@cebarks/pi-vertex`, v2.x)
+3. **this repo** — [`cebarks/pi-vertex`](https://github.com/cebarks/pi-vertex) (`@cebarks/pi-vertex`, v2.x → v3.x)
 
 The reason for the second fork is discovery. Up to v1.1.9 the model list was a hand-maintained static table: every new Vertex model required an upstream code change, a release, and a pi-package update on your side — and enabling a model your project has access to was invisible until someone shipped it. This fork queries the Model Garden API at startup, probes each model for project-level access, and registers what actually answers. Static metadata is still used where it exists, so pricing and capability limits for known models stay authoritative rather than guessed.
 
-### What this fork adds (v2.x, on top of v1.1.9)
+### What this fork adds (v2.x–v3.x, on top of v1.1.9)
 
 | Change | Details |
 | -------- | --------- |
@@ -32,20 +32,22 @@ The reason for the second fork is discovery. Up to v1.1.9 the model list was a h
 | **Probe-based availability** | Each candidate is checked with a `countTokens` request against *your* project. `200` → available; `400 "…infeasible"` → available (Claude/MaaS don't implement `countTokens`); `404`/org-policy/not-servable → skipped. No more offering models your project can't reach |
 | **Disk cache + `/vertex-refresh`** | Results cached to `~/.pi/agent/cache/pi-vertex-models.json` (default TTL 24 h) so startup stays fast; `/vertex-refresh` clears the cache and re-probes in-session |
 | **Discovery configuration** | `discoveryEnabled`, `discoveryCacheTtlMs`, `discoveryPublishers` in the settings file; falls back to the full static table if discovery is off or fails |
-| **New models** | `claude-opus-4-8`, `claude-sonnet-5` |
+| **New models** | `claude-opus-4-8`, `claude-opus-4-7`, `claude-sonnet-5`, `claude-opus-5`, `claude-opus-5-5`, `claude-fable-5`, `claude-fable-5-1` |
+| **Thinking mode derived from the model id** | Adaptive (`thinking: {type: "adaptive"}` + `output_config.effort`) on Claude 4.6+ including every 5.x family, legacy `budget_tokens` on 4.5 and below. Deciding this from the static table alone meant any newly discovered Claude model — the headline feature of this fork — silently took the legacy branch and Vertex rejected every request with `"thinking.type.enabled" is not supported for this model`. Effort is clamped to the ladder each model actually accepts (the 4.6 series rejects `xhigh` but takes `max`; 4.7+/5.x take all five), and `thinkingLevelMap` is published so pi only offers levels the model supports. |
+| **pi-ai 0.87 transcript contract** | System prompt and tool declarations are replayed from the message list (`getCurrentSystemPrompt` / `getCurrentTools`) instead of the removed `context.systemPrompt` / `context.tools` fields, so AGENTS.md, skills and tools reach Vertex again. Tool names Anthropic rejects (`^[a-zA-Z0-9_-]{1,128}$`) are sanitized outbound and mapped back inbound, so one MCP-namespaced name no longer takes every tool down. |
 | **pi package scope migration** | Moved to `@earendil-works/pi-ai` / `@earendil-works/pi-coding-agent` and cleared the `npm audit` findings that came with the old dependency set |
 | **Bug fixes** | `baseUrl: undefined` so pi's provider-level fallback wins (empty string used to short-circuit `??`); `streamSimpleOpenAICompletions` imported via the compat root entrypoint (pi's jiti module map exposes root entrypoints only); Gemini `maxTokens` 65,536 → 65,535 (Vertex treats the bound as exclusive); legacy `thinking` config for Claude 4.5 and below, adaptive thinking for 4.6+ |
 
 ### Carried over from the previous fork
 
-Standalone repo; 93 unit tests (auth, config, utils, model integrity, `convertToGeminiMessages`, streaming dispatch, mocked Gemini + MaaS streams); Biome lint/format; GitHub Actions workflow for type-check, lint, coverage; real `build`/`check`/`test` scripts; Anthropic stream lifecycle fixed to `end()` exactly once; hardcoded `maxTokens / 2` halving removed; regional Claude pricing (`costRegional`) applied when the resolved endpoint isn't global; Gemini cache-token accounting, image tool-result replay, missing-tool-result synthesis, and safety/blocked finish handling.
+Standalone repo; 128 unit tests across 9 files (auth, config, utils, model integrity, discovery enrichment, `convertToGeminiMessages`, streaming dispatch, mocked Gemini + MaaS streams, thinking payloads and transcript replay); Biome lint/format; GitHub Actions workflow for type-check, lint, coverage; real `build`/`check`/`test` scripts; Anthropic stream lifecycle fixed to `end()` exactly once; hardcoded `maxTokens / 2` halving removed; regional Claude pricing (`costRegional`) applied when the resolved endpoint isn't global; Gemini cache-token accounting, image tool-result replay, missing-tool-result synthesis, and safety/blocked finish handling.
 
 ### Provenance
 
 - **Upstream**: [`lhl/pi-vertex`](https://github.com/lhl/pi-vertex) → [`ssweens/pi-packages`](https://github.com/ssweens/pi-packages) (path `pi-vertex/`, filtered with `git filter-repo --path pi-vertex/ --path-rename pi-vertex/:`, so upstream history is intact)
 - **Fork point**: v1.1.9 (`f7b1a46`), rebranded in `d5ca3b3` (2026-08-25)
 - **npm**: [`@cebarks/pi-vertex`](https://www.npmjs.com/package/@cebarks/pi-vertex) · **repo**: [`cebarks/pi-vertex`](https://github.com/cebarks/pi-vertex)
-- **Requirements**: pi ≥ 0.74 (the `@earendil-works/*` scope); developed against 0.84.x
+- **Requirements**: pi ≥ 0.87 (the provider stream contract changed shape there); developed against 0.87.1, verified live on 0.99.x
 
 ## Model discovery
 
@@ -197,6 +199,10 @@ Non-global regions use `costRegional` where Google publishes a regional premium.
 
 | Model | Context | Max output | Reasoning | Global (in/out) | Regional (in/out) |
 | --- | --- | --- | --- | --- | --- |
+| `claude-opus-5-5` | 1M | 128,000 | yes | $4.00/$20.00 | $4.40/$22.00 |
+| `claude-opus-5` | 1M | 128,000 | yes | $5.00/$25.00 | $5.50/$27.50 |
+| `claude-fable-5` | 1M | 128,000 | yes | $10.00/$50.00 | $11.00/$55.00 |
+| `claude-fable-5-1` | 1M | 128,000 | yes | $10.00/$50.00 | $11.00/$55.00 |
 | `claude-opus-4-8` | 1M | 128,000 | yes | $5.00/$25.00 | $5.50/$27.50 |
 | `claude-opus-4-7` | 1M | 128,000 | yes | $5.00/$25.00 | $5.50/$27.50 |
 | `claude-opus-4-6` | 1M | 128,000 | yes | $5.00/$25.00 | $5.50/$27.50 |

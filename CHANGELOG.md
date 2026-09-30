@@ -31,6 +31,33 @@ All notable changes to this project will be documented in this file.
   containing `:` or `.` returned 400 and took *every* tool down with it. Names are
   sanitized outbound and mapped back inbound so pi can still dispatch the call.
   Collisions are disambiguated with a numeric suffix.
+- **Every reasoning-enabled request to a Claude model that was absent from the
+  static table returned HTTP 400.** Vertex answers
+  `"thinking.type.enabled" is not supported for this model. Use
+  "thinking.type.adaptive" and "output_config.effort"` for any Claude 4.6+ model,
+  and adaptive is only legal on 4.6+. `streaming/maas.ts` chose the thinking mode
+  from `model.adaptiveThinking`, a field the static table sets — but dynamic
+  discovery synthesizes unknown models from `PUBLISHER_DEFAULTS.anthropic`, which
+  carries no `adaptiveThinking`, so a newly enabled model (observed live with
+  `claude-opus-5`) silently fell to the legacy
+  `{thinking: {type: "enabled", budget_tokens: N}}` branch and every request with
+  thinking on failed. Thinking mode is now derived from the model id
+  (`claudeSupportsAdaptiveThinking`): adaptive on 4.6+ including every 5.x family,
+  legacy budget on 4.5 and below, adaptive for ids that do not parse, because an id
+  nobody has catalogued yet is almost always a newer release. The static field still
+  overrides the derivation where a model genuinely differs.
+- **`xhigh` was sent to models that reject it, and pi's `max` was silently downgraded
+  to `high`.** The 4.6 series answers `This model does not support effort level
+  'xhigh'. Supported levels: high, low, max, medium`, while 4.7+ and the 5.x series
+  accept all five rungs. Effort now comes from the model's real ladder
+  (`claudeEffortLevels`), with missing rungs stepping up first (`xhigh` → `max` on
+  4.6) and only then down, so a level pi exposes is never dropped to a weaker one.
+- **Legacy budgets could violate `max_tokens > budget_tokens`.** `xhigh` requested a
+  16384-token budget regardless of the model's output ceiling, which the pre-existing
+  `max_tokens` bump papered over. Budgets are now clamped under `model.maxTokens`.
+- **Claude 5.x models were misreported when they resolved at all.** Without a static
+  entry, `claude-opus-5` inherited the Anthropic publisher defaults: 200K context,
+  64K output, $3/$15 pricing. Real specs are 1M context, 128K output, $5/$25.
 - Two pre-existing type errors in `streaming/gemini.ts`: pi-ai 0.87 tightened
   `ToolCall.arguments` from `Record<string, unknown>` to `JsonObject`.
 - `tests/auth.test.ts` no longer fails on machines with a real gcloud/ADC setup.
@@ -54,6 +81,17 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- `models/claude.ts`: `claude-opus-5`, `claude-opus-5-5`, `claude-fable-5` and
+  `claude-fable-5-1` (1M/128K, verified Vertex ids and rates).
+- `thinkingLevelMap` is published for every Anthropic reasoning model, so pi only
+  offers `xhigh`/`max` on models whose ladder includes them (pi hides a level unless
+  the map carries a non-null entry) and never offers `max` on legacy-budget models.
+- 7 payload-level regression tests in `tests/streaming-maas.test.ts` asserting what
+  actually goes to Anthropic: an undeclared Claude 5.x model must send
+  `{type: "adaptive"}` and never `budget_tokens`, `max` stays `max`, `xhigh` steps to
+  `max` on 4.6 and holds on 4.7+/5.x, 4.5 keeps the legacy budget with
+  `max_tokens > budget_tokens`, and no reasoning level sends no thinking block. These
+  fail if the id-derived fallback is removed.
 - `scripts/live-probe.ts` — manual, network-gated probe (excluded from `npm test`)
   that forces a real Vertex call which can only be satisfied by emitting a
   `tool_use` block. Verified live against `claude-haiku-4-5`, `claude-opus-4-8`
