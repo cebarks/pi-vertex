@@ -519,3 +519,124 @@ describe("streamMaaS — transcript context (system prompt + tools)", () => {
     expect(params).not.toHaveProperty("tools");
   });
 });
+
+describe("streamMaaS — Claude thinking mode (adaptive vs legacy budget)", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mocks.resolveLocation.mockImplementation((region?: string) => region ?? "global");
+    mocks.getAuthConfig.mockReturnValue({ projectId: "test-project", location: "global" });
+    mocks.anthropicVertex.mockImplementation(() => ({
+      messages: { stream: mocks.anthropicStream },
+    }));
+    mocks.anthropicStream.mockReturnValue(
+      asyncIter([
+        {
+          type: "message_start",
+          message: { id: "msg_t", usage: { input_tokens: 1, output_tokens: 1 } },
+        },
+        { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 1 } },
+      ]),
+    );
+  });
+
+  function sentParams(): Record<string, any> {
+    const call = mocks.anthropicStream.mock.calls[0];
+    if (!call) throw new Error("AnthropicVertex.messages.stream was never called");
+    return call[0] as Record<string, any>;
+  }
+
+  async function paramsFor(
+    model: VertexModelConfig,
+    reasoning: "minimal" | "low" | "medium" | "high" | "xhigh" | "max",
+  ) {
+    await collectEvents(
+      streamMaaS(model, makeContext({ messages: [userMsg("hi")] }), { reasoning }),
+    );
+    return sentParams();
+  }
+
+  // The bug that produced: 400 {"type":"invalid_request_error","message":"\"thinking.type.enabled\"
+  // is not supported for this model. Use \"thinking.type.adaptive\" and \"output_config.effort\"'}
+  // claude-opus-5 was absent from the static table, so discovery synthesized it from
+  // PUBLISHER_DEFAULTS.anthropic (no adaptiveThinking) and it fell to the legacy branch.
+  it("sends adaptive thinking for a discovered Claude 5.x model that declares nothing", async () => {
+    const params = await paramsFor(
+      makeAnthropicModel({
+        id: "claude-opus-5",
+        name: "Claude Opus 5",
+        apiId: "claude-opus-5",
+        adaptiveThinking: undefined,
+        maxTokens: 128000,
+      }),
+      "high",
+    );
+
+    expect(params.thinking).toEqual({ type: "adaptive" });
+    expect(params.output_config).toEqual({ effort: "high" });
+    expect(params.thinking).not.toHaveProperty("budget_tokens");
+  });
+
+  it("maps pi max to Anthropic max instead of downgrading to high", async () => {
+    const params = await paramsFor(
+      makeAnthropicModel({ id: "claude-opus-5", adaptiveThinking: undefined }),
+      "max",
+    );
+
+    expect(params.thinking).toEqual({ type: "adaptive" });
+    expect(params.output_config).toEqual({ effort: "max" });
+  });
+
+  it("steps xhigh up to max on the 4.6 series, which rejects xhigh", async () => {
+    const params = await paramsFor(
+      makeAnthropicModel({ id: "claude-opus-4-6", adaptiveThinking: true }),
+      "xhigh",
+    );
+
+    expect(params.thinking).toEqual({ type: "adaptive" });
+    expect(params.output_config).toEqual({ effort: "max" });
+  });
+
+  it("keeps xhigh on 4.7+ and the 5.x series, which accept it", async () => {
+    const params = await paramsFor(
+      makeAnthropicModel({ id: "claude-opus-4-8", adaptiveThinking: true }),
+      "xhigh",
+    );
+
+    expect(params.output_config).toEqual({ effort: "xhigh" });
+  });
+
+  it("still sends the legacy budget for Claude 4.5 and below", async () => {
+    const params = await paramsFor(makeAnthropicModel({ id: "claude-sonnet-4-5" }), "high");
+
+    expect(params.thinking).toEqual({ type: "enabled", budget_tokens: 8192 });
+    expect(params).not.toHaveProperty("output_config");
+    expect(params.max_tokens).toBeGreaterThan(params.thinking.budget_tokens);
+  });
+
+  it("clamps the legacy budget under maxTokens so xhigh cannot violate the ordering", async () => {
+    const params = await paramsFor(
+      makeAnthropicModel({ id: "claude-haiku-4-5", maxTokens: 8192 }),
+      "xhigh",
+    );
+
+    expect(params.thinking.type).toBe("enabled");
+    expect(params.thinking.budget_tokens).toBeLessThan(params.max_tokens);
+    expect(params.thinking.budget_tokens).toBeGreaterThanOrEqual(1024);
+  });
+
+  // pi's ThinkingLevel type has no "off" member: turning thinking off means the
+  // provider is called without `reasoning` at all. Guard the omission so a Claude
+  // model never gets a thinking block the user did not ask for.
+  it("omits thinking entirely when the caller passes no reasoning level", async () => {
+    await collectEvents(
+      streamMaaS(
+        makeAnthropicModel({ id: "claude-opus-5" }),
+        makeContext({ messages: [userMsg("hi")] }),
+      ),
+    );
+
+    const params = sentParams();
+    expect(params).not.toHaveProperty("thinking");
+    expect(params).not.toHaveProperty("output_config");
+  });
+});
